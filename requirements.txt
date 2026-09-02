@@ -1,0 +1,2 @@
+# JARVIS V12.1.0 standard runtime. Native llama-cpp-python remains optional.
+-r requirements-windows.txt

@@ -1,0 +1,78 @@
+[project]
+name = "jarvis-v12"
+version = "12.1.2"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "flet==0.86.5",
+    "requests>=2.31.0",
+    "numpy>=1.26",
+    "psutil>=5.9",
+    "pynvml>=12.0",
+    "lancedb>=0.6",
+    "rich>=13.7",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "pydantic>=2.6",
+    "httpx>=0.27",
+]
+
+# Full local JARVIS runtime is a desktop feature set. Android/iOS use the
+# lightweight API-client UI and deliberately do not bundle native/server deps.
+[tool.flet]
+desktop_flavor = "full"
+product = "JARVIS"
+org = "com.jarvis"
+bundle_id = "com.jarvis.ai"
+
+[tool.flet.app]
+module = "gui/flet_app.py"
+
+[project.scripts]
+jarvis = "main:main"
+
+[tool.flet.windows]
+dependencies = [
+    "numpy>=1.26.0", "psutil>=5.9.0", "beautifulsoup4>=4.12.0", "markdown>=3.5.0",
+    "pdfminer.six>=20221105", "python-dateutil>=2.8.0", "rich>=13.7.0", "watchdog>=4.0.0",
+    "fastapi>=0.110.0", "uvicorn[standard]>=0.29.0", "pydantic>=2.6.0", "pyzmq>=25.0.0",
+    "lancedb>=0.6.0", "sentence-transformers>=2.5.0", "playwright>=1.42.0",
+"sounddevice>=0.4.0", "scipy>=1.12.0", "pillow>=10.0.0", "pyautogui>=0.9.54"
+]
+[tool.flet.linux]
+dependencies = [
+    "numpy>=1.26.0", "psutil>=5.9.0", "beautifulsoup4>=4.12.0", "markdown>=3.5.0",
+    "pdfminer.six>=20221105", "python-dateutil>=2.8.0", "rich>=13.7.0", "watchdog>=4.0.0",
+    "fastapi>=0.110.0", "uvicorn[standard]>=0.29.0", "pydantic>=2.6.0", "pyzmq>=25.0.0",
+    "lancedb>=0.6.0", "sentence-transformers>=2.5.0", "playwright>=1.42.0",
+"sounddevice>=0.4.0", "scipy>=1.12.0", "pillow>=10.0.0", "pyautogui>=0.9.54"
+]
+[tool.flet.android]
+dependencies = []
+target_arch = ["arm64-v8a", "x86_64", "armeabi-v7a"]
+
+[project.optional-dependencies]
+dev = ["flet[test]"]
+
+[tool.setuptools.packages.find]
+include = [
+    "api*",
+    "agents*",
+    "aion_bridge*",
+    "computer*",
+    "core*",
+    "gui*",
+    "knowledge*",
+    "memory*",
+    "observability*",
+    "plugins*",
+    "protocols*",
+    "qwen_integration*",
+    "tools*",
+    "training*",
+    "voice*"
+]
+exclude = ["tests*", "data*", "*.tests*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -1,0 +1,183 @@
+{
+  "version": "12.1.2",
+  "mode": "development",
+  "brain": {
+    "default_backend": "native",
+    "fallback_chain": [
+      "local-llama-server",
+      "native"
+    ],
+    "backends": {
+      "native": {
+        "timeout": 120,
+        "n_ctx": 8192,
+        "n_batch": 512,
+        "n_gpu_layers": -1
+      }
+    },
+    "allow_mock": false,
+    "dual_brain": {
+      "enabled": true,
+      "fast_backend": null,
+      "strong_backend": null
+    }
+  },
+  "native": {
+    "model_dirs": [
+      "data/models",
+      "~/.lmstudio/models",
+      "~/models"
+    ],
+    "extensions": [
+      ".gguf"
+    ],
+    "n_ctx": 8192,
+    "n_batch": 512,
+    "n_gpu_layers": -1,
+    "flash_attn": false,
+    "verbose": false
+  },
+  "model_swarm": {
+    "enabled": true,
+    "max_models_in_vram": 2,
+    "eviction_policy": "lru"
+  },
+  "predictor": {
+    "enabled": true,
+    "confidence_threshold": 0.7
+  },
+  "self_awareness": {
+    "enabled": true,
+    "background": true,
+    "max_files": 2000,
+    "max_file_bytes": 2000000
+  },
+  "lora": {
+    "nightly_train": false,
+    "rank": 16,
+    "epochs": 1
+  },
+  "distributed": {
+    "enabled": false,
+    "coordinator_port": 28766,
+    "auth_token": ""
+  },
+  "memory": {
+    "lance_path": "data/jarvis_lance",
+    "db_path": null,
+    "max_history": 100,
+    "max_sessions": 1000,
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2"
+  },
+  "tool_cache": {
+    "enabled": true,
+    "ttl": 300
+  },
+  "react": {
+    "enabled": false,
+    "max_steps": 5
+  },
+  "security": {
+    "workspace_root": "data/workspace",
+    "allow_shell": false,
+    "mode": "guarded",
+    "allow_network": false,
+    "require_approval_for_high_risk": true,
+    "allowed_capabilities": [
+      "filesystem.read"
+    ],
+    "audit_log": "data/audit.jsonl",
+    "high_risk_capabilities": [
+      "process.spawn",
+      "system.modify",
+      "browser.control",
+      "filesystem.write",
+      "network.connect",
+      "microphone.capture",
+      "camera.capture"
+    ]
+  },
+  "watchdog": {
+    "enabled": true,
+    "check_interval": 5,
+    "max_restart_attempts": 3
+  },
+  "proactive": {
+    "enabled": true,
+    "disk_threshold": 90,
+    "cpu_threshold": 95,
+    "memory_threshold": 90
+  },
+  "consolidation": {
+    "nightly_enabled": true,
+    "age_days": 7
+  },
+  "observability": {
+    "log_path": "data/jarvis.jsonl",
+    "max_log_mb": 10,
+    "retain_days": 7,
+    "audit_max_mb": 25,
+    "audit_retain_days": 30
+  },
+  "voice": {
+    "wake_phrases": [
+      "hey jarvis",
+      "jarvis"
+    ],
+    "stt_model": "whisper",
+    "tts_enabled": true
+  },
+  "personas": [
+    "default",
+    "coder",
+    "researcher",
+    "concise",
+    "teacher",
+    "creative"
+  ],
+  "api": {
+    "cors_origins": [
+      "http://127.0.0.1:8000",
+      "http://localhost:8000"
+    ],
+    "rate_limit": "60/minute",
+    "host": "127.0.0.1",
+    "port": 8000
+  },
+  "plugins": {
+    "hot_reload": false,
+    "staging_timeout": 300,
+    "allowed_capabilities": []
+  },
+  "qwen": {
+    "enabled": false,
+    "api_base": "http://127.0.0.1:11434/v1",
+    "default_model": "qwen3:8b"
+  },
+  "aion_bridge": {
+    "enabled": false,
+    "journal_path": "data/aion_journal.jsonl",
+    "poll_interval": 2
+  },
+  "self_edit": {
+    "allow_apply": false
+  },
+  "diagnostics": {
+    "doctor": true
+  },
+  "external_backends": [
+    {
+      "name": "local-llama-server",
+      "enabled": true,
+      "primary": true,
+      "base_url": "http://127.0.0.1:52851/v1",
+      "api_key_env": "JARVIS_LLAMA_SERVER_API_KEY",
+      "model": "granite-3.1-8b-instruct-Q4_K_M",
+      "timeout": 120,
+      "capabilities": [
+        "general",
+        "chat"
+      ]
+    }
+  ]
+}
