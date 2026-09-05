@@ -1,0 +1,46 @@
+version: "3.8"
+
+services:
+  jarvis:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - JARVIS_API_TOKEN=${JARVIS_API_TOKEN:-dev-token-change-in-production}
+      - JARVIS_SECURITY_SECRET=${JARVIS_SECURITY_SECRET:-dev-secret-change-in-production}
+      - JARVIS_MODE=${JARVIS_MODE:-development}
+    volumes:
+      - ./data:/app/data
+      - ./config.json:/app/config.json:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    # Optional: Resource limits
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '4'
+    #       memory: 8G
+    #     reservations:
+    #       cpus: '2'
+    #       memory: 4G
+
+  # Optional: Redis for caching and distributed features
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   healthcheck:
+  #     test: ["CMD", "redis-cli", "ping"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 3
+
+# volumes:
+#   redis_data:
