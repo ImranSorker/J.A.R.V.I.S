@@ -380,7 +380,7 @@ The default configuration enables bounded autonomous operation. Autonomy is budg
 
 * `python -m compileall -q .` — PASS
 * `python scripts/verify_release.py dist/JARVIS_V12.8.0_SUPREME.zip` — PASS
-* `pytest -q --disable-warnings` — **279 passed, 3 skipped**
+* `pytest -q --disable-warnings` — **286 passed, 0 failed**
 * Skipped tests require the Flet runtime, which was unavailable in the audit environment.
 * Python source contains no TODO/FIXME/NotImplemented markers or bare `pass` placeholders.
 * Release manifest is generated from final source contents and excludes itself.
