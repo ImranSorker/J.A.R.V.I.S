@@ -1,90 +1,211 @@
 {
-  "version": "12.1.2",
-  "mode": "development",
-  "brain": {
-    "default_backend": "native",
-    "fallback_chain": [
-      "local-llama-server",
-      "native"
+  "aion_bridge": {
+    "enabled": false,
+    "journal_path": "data/aion_journal.jsonl",
+    "poll_interval": 2
+  },
+  "api": {
+    "cors_origins": [
+      "http://127.0.0.1:8000",
+      "http://localhost:8000"
     ],
+    "host": "127.0.0.1",
+    "port": 8000,
+    "rate_limit": "60/minute"
+  },
+  "autonomy": {
+    "background_cognition": true,
+    "background_interval_seconds": 60.0,
+    "budget": {
+      "max_agents": 8,
+      "max_cpu_seconds": 3600,
+      "max_external_actions": 20,
+      "max_files_written": 500,
+      "max_memory_mb": 8192,
+      "max_network_requests": 500,
+      "max_parallel_tasks": 6,
+      "max_runtime_seconds": 7200
+    },
+    "default_level": "BOUNDED",
+    "max_goals": 1000,
+    "max_idle_interval_seconds": 60,
+    "max_parallel_missions": 2
+  },
+  "brain": {
+    "allow_mock": false,
     "backends": {
       "native": {
-        "timeout": 120,
-        "n_ctx": 8192,
         "n_batch": 512,
-        "n_gpu_layers": -1
+        "n_ctx": 8192,
+        "n_gpu_layers": -1,
+        "timeout": 120
       }
     },
-    "allow_mock": false,
+    "default_backend": "native",
     "dual_brain": {
       "enabled": true,
       "fast_backend": null,
       "strong_backend": null
+    },
+    "fallback_chain": [
+      "local-llama-server",
+      "native"
+    ]
+  },
+  "consolidation": {
+    "age_days": 7,
+    "nightly_enabled": true
+  },
+  "data_pipeline": {
+    "max_input_items": 100000,
+    "max_payload_bytes": 25000000
+  },
+  "diagnostics": {
+    "doctor": true
+  },
+  "distributed": {
+    "auth_token": "",
+    "coordinator_port": 28766,
+    "enabled": false
+  },
+  "external_backends": [
+    {
+      "api_key_env": "JARVIS_LLAMA_SERVER_API_KEY",
+      "base_url": "http://127.0.0.1:52851/v1",
+      "capabilities": [
+        "general",
+        "chat"
+      ],
+      "enabled": true,
+      "model": "granite-3.1-8b-instruct-Q4_K_M",
+      "name": "local-llama-server",
+      "primary": true,
+      "timeout": 120
     }
+  ],
+  "ingestion": {
+    "max_file_bytes": 25000000
+  },
+  "lora": {
+    "epochs": 1,
+    "nightly_train": false,
+    "rank": 16
+  },
+  "memory": {
+    "db_path": null,
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "lance_path": "data/jarvis_lance",
+    "max_history": 100,
+    "max_sessions": 1000
+  },
+  "mode": "development",
+  "model_swarm": {
+    "enabled": true,
+    "eviction_policy": "lru",
+    "max_models_in_vram": 2
+  },
+  "multimodal": {
+    "audio": true,
+    "enabled": true,
+    "vision": true
   },
   "native": {
+    "extensions": [
+      ".gguf"
+    ],
+    "flash_attn": false,
     "model_dirs": [
       "data/models",
       "~/.lmstudio/models",
       "~/models"
     ],
-    "extensions": [
-      ".gguf"
-    ],
-    "n_ctx": 8192,
     "n_batch": 512,
+    "n_ctx": 8192,
     "n_gpu_layers": -1,
-    "flash_attn": false,
     "verbose": false
   },
-  "model_swarm": {
-    "enabled": true,
-    "max_models_in_vram": 2,
-    "eviction_policy": "lru"
+  "observability": {
+    "audit_max_mb": 25,
+    "audit_retain_days": 30,
+    "log_path": "data/jarvis.jsonl",
+    "max_log_mb": 10,
+    "retain_days": 7,
+    "token_accounting": {
+      "audit_path": "data/token_accounting.jsonl",
+      "default_price": {
+        "completion_per_1k": 0.0,
+        "prompt_per_1k": 0.0
+      },
+      "enabled": true,
+      "global_token_budget": 1000000,
+      "max_calls_per_window": 240,
+      "max_completion_tokens": 4096,
+      "prices": {},
+      "session_cost_budget_usd": null,
+      "session_token_budget": 100000,
+      "window_seconds": 60.0
+    }
+  },
+  "personas": [
+    "default",
+    "coder",
+    "researcher",
+    "concise",
+    "teacher",
+    "creative"
+  ],
+  "plugins": {
+    "allowed_capabilities": [],
+    "hot_reload": false,
+    "staging_timeout": 300
   },
   "predictor": {
+    "confidence_threshold": 0.7,
+    "enabled": true
+  },
+  "proactive": {
+    "cpu_threshold": 95,
+    "disk_threshold": 90,
     "enabled": true,
-    "confidence_threshold": 0.7
+    "memory_threshold": 90
   },
-  "self_awareness": {
-    "enabled": true,
-    "background": true,
-    "max_files": 2000,
-    "max_file_bytes": 2000000
-  },
-  "lora": {
-    "nightly_train": false,
-    "rank": 16,
-    "epochs": 1
-  },
-  "distributed": {
-    "enabled": false,
-    "coordinator_port": 28766,
-    "auth_token": ""
-  },
-  "memory": {
-    "lance_path": "data/jarvis_lance",
-    "db_path": null,
-    "max_history": 100,
-    "max_sessions": 1000,
-    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2"
-  },
-  "tool_cache": {
-    "enabled": true,
-    "ttl": 300
+  "qwen": {
+    "api_base": "http://127.0.0.1:11434/v1",
+    "default_model": "qwen3:8b",
+    "enabled": false
   },
   "react": {
     "enabled": false,
     "max_steps": 5
   },
+  "recovery": {
+    "max_attempts": 3
+  },
+  "reliability": {
+    "cb_failure_threshold": 3,
+    "cb_half_open_calls": 1,
+    "cb_recovery_timeout": 30,
+    "cb_success_threshold": 1,
+    "idempotency_ttl_seconds": 86400,
+    "max_concurrent_jobs": 5,
+    "max_concurrent_jobs_per_owner": 2,
+    "max_job_cpu_seconds": 60,
+    "max_job_queue_depth": 500,
+    "max_job_wall_seconds": 300,
+    "schema_max_errors": 32
+  },
   "security": {
-    "workspace_root": "data/workspace",
-    "allow_shell": false,
-    "mode": "guarded",
-    "allow_network": false,
-    "require_approval_for_high_risk": true,
+    "allow_code_execution": true,
+    "allow_network": true,
+    "allow_shell": true,
     "allowed_capabilities": [
-      "filesystem.read"
+      "*"
+    ],
+    "allowed_executables": [
+      "python",
+      "python3",
+      "pytest",
+      "git"
     ],
     "audit_log": "data/audit.jsonl",
     "high_risk_capabilities": [
@@ -95,89 +216,81 @@
       "network.connect",
       "microphone.capture",
       "camera.capture"
-    ]
-  },
-  "watchdog": {
-    "enabled": true,
-    "check_interval": 5,
-    "max_restart_attempts": 3
-  },
-  "proactive": {
-    "enabled": true,
-    "disk_threshold": 90,
-    "cpu_threshold": 95,
-    "memory_threshold": 90
-  },
-  "consolidation": {
-    "nightly_enabled": true,
-    "age_days": 7
-  },
-  "observability": {
-    "log_path": "data/jarvis.jsonl",
-    "max_log_mb": 10,
-    "retain_days": 7,
-    "audit_max_mb": 25,
-    "audit_retain_days": 30
-  },
-  "voice": {
-    "wake_phrases": [
-      "hey jarvis",
-      "jarvis"
     ],
-    "stt_model": "whisper",
-    "tts_enabled": true
+    "mode": "autonomous",
+    "require_approval_for_high_risk": false,
+    "sandbox_strict_isolation": false,
+    "workspace_root": "data/workspace"
   },
-  "personas": [
-    "default",
-    "coder",
-    "researcher",
-    "concise",
-    "teacher",
-    "creative"
-  ],
-  "api": {
-    "cors_origins": [
-      "http://127.0.0.1:8000",
-      "http://localhost:8000"
-    ],
-    "rate_limit": "60/minute",
-    "host": "127.0.0.1",
-    "port": 8000
-  },
-  "plugins": {
-    "hot_reload": false,
-    "staging_timeout": 300,
-    "allowed_capabilities": []
-  },
-  "qwen": {
-    "enabled": false,
-    "api_base": "http://127.0.0.1:11434/v1",
-    "default_model": "qwen3:8b"
-  },
-  "aion_bridge": {
-    "enabled": false,
-    "journal_path": "data/aion_journal.jsonl",
-    "poll_interval": 2
+  "self_awareness": {
+    "background": true,
+    "enabled": true,
+    "max_file_bytes": 2000000,
+    "max_files": 2000
   },
   "self_edit": {
     "allow_apply": false
   },
-  "diagnostics": {
-    "doctor": true
+  "self_improvement": {
+    "enabled": true,
+    "max_verified_changes": 1000,
+    "require_authorization": true
   },
-  "external_backends": [
-    {
-      "name": "local-llama-server",
-      "enabled": true,
-      "primary": true,
-      "base_url": "http://127.0.0.1:52851/v1",
-      "api_key_env": "JARVIS_LLAMA_SERVER_API_KEY",
-      "model": "granite-3.1-8b-instruct-Q4_K_M",
-      "timeout": 120,
-      "capabilities": [
-        "general",
-        "chat"
+  "tool_cache": {
+    "enabled": true,
+    "ttl": 300
+  },
+  "v12_7": {
+    "computer_use_enabled": false,
+    "max_adversarial_cases": 5000,
+    "max_evaluation_cases": 1000,
+    "max_memory_records": 100000,
+    "max_temporal_facts": 100000,
+    "max_workers": 64,
+    "worker_lease_seconds": 30
+  },
+  "version": "12.8.0",
+  "voice": {
+    "stt_model": "whisper",
+    "tts_enabled": true,
+    "wake_phrases": [
+      "hey jarvis",
+      "jarvis"
+    ]
+  },
+  "watchdog": {
+    "check_interval": 5,
+    "enabled": true,
+    "max_restart_attempts": 3
+  },
+  "world_model": {
+    "db_path": "data/world_model.db",
+    "max_entities": 100000
+  },
+  "v13": {
+    "enabled": true,
+    "event_db": "data/v13_events.db",
+    "capabilities": {
+      "allow": [
+        "calculator",
+        "filesystem.read",
+        "memory.read",
+        "memory.write",
+        "model.infer",
+        "tools.read"
+      ],
+      "approval_required": [
+        "process.*",
+        "system.*",
+        "filesystem.write",
+        "network.connect",
+        "browser.*",
+        "camera.*",
+        "microphone.*",
+        "model.train.*"
       ]
-    }
-  ]
+    },
+    "compatibility_mode": true,
+    "event_replay_limit": 1000
+  }
 }

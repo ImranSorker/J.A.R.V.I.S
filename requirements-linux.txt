@@ -1,4 +1,4 @@
-# J.A.R.V.I.S. V12.8.0 Windows runtime dependencies
+# J.A.R.V.I.S. V12.8.0 Linux runtime dependencies
 -r requirements.txt
 pyttsx3>=2.90
 sounddevice>=0.4
