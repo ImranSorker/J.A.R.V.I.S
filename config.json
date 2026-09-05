@@ -195,19 +195,20 @@
     "schema_max_errors": 32
   },
   "security": {
-    "allow_code_execution": true,
-    "allow_network": true,
-    "allow_shell": true,
+    "allow_code_execution": false,
+    "allow_network": false,
+    "allow_shell": false,
     "allowed_capabilities": [
-      "*"
+      "calculator",
+      "filesystem.read",
+      "memory.read",
+      "memory.write",
+      "model.infer",
+      "tools.read"
     ],
-    "allowed_executables": [
-      "python",
-      "python3",
-      "pytest",
-      "git"
-    ],
+    "allowed_executables": [],
     "audit_log": "data/audit.jsonl",
+    "fail_closed": true,
     "high_risk_capabilities": [
       "process.spawn",
       "system.modify",
@@ -215,11 +216,13 @@
       "filesystem.write",
       "network.connect",
       "microphone.capture",
-      "camera.capture"
+      "camera.capture",
+      "code.execute",
+      "shell.exec"
     ],
-    "mode": "autonomous",
-    "require_approval_for_high_risk": false,
-    "sandbox_strict_isolation": false,
+    "mode": "restricted",
+    "require_approval_for_high_risk": true,
+    "sandbox_strict_isolation": true,
     "workspace_root": "data/workspace"
   },
   "self_awareness": {
