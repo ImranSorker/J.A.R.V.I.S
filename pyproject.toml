@@ -1,6 +1,11 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "jarvis-v12"
-version = "12.1.2"
+version = "12.8.0"
+description = "J.A.R.V.I.S. production cognitive platform with Flet command center"
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "flet==0.86.5",
@@ -14,10 +19,10 @@ dependencies = [
     "uvicorn>=0.29",
     "pydantic>=2.6",
     "httpx>=0.27",
+    "cryptography>=42.0",
+    "jsonschema>=4.21",
 ]
 
-# Full local JARVIS runtime is a desktop feature set. Android/iOS use the
-# lightweight API-client UI and deliberately do not bundle native/server deps.
 [tool.flet]
 desktop_flavor = "full"
 product = "JARVIS"
@@ -26,6 +31,9 @@ bundle_id = "com.jarvis.ai"
 
 [tool.flet.app]
 module = "gui/flet_app.py"
+
+[tool.setuptools]
+py-modules = ["main"]
 
 [project.scripts]
 jarvis = "main:main"
@@ -36,43 +44,51 @@ dependencies = [
     "pdfminer.six>=20221105", "python-dateutil>=2.8.0", "rich>=13.7.0", "watchdog>=4.0.0",
     "fastapi>=0.110.0", "uvicorn[standard]>=0.29.0", "pydantic>=2.6.0", "pyzmq>=25.0.0",
     "lancedb>=0.6.0", "sentence-transformers>=2.5.0", "playwright>=1.42.0",
-"sounddevice>=0.4.0", "scipy>=1.12.0", "pillow>=10.0.0", "pyautogui>=0.9.54"
+    "sounddevice>=0.4.0", "scipy>=1.12.0", "pillow>=10,<12.0.0", "pyautogui>=0.9.54"
 ]
+
 [tool.flet.linux]
 dependencies = [
     "numpy>=1.26.0", "psutil>=5.9.0", "beautifulsoup4>=4.12.0", "markdown>=3.5.0",
     "pdfminer.six>=20221105", "python-dateutil>=2.8.0", "rich>=13.7.0", "watchdog>=4.0.0",
     "fastapi>=0.110.0", "uvicorn[standard]>=0.29.0", "pydantic>=2.6.0", "pyzmq>=25.0.0",
     "lancedb>=0.6.0", "sentence-transformers>=2.5.0", "playwright>=1.42.0",
-"sounddevice>=0.4.0", "scipy>=1.12.0", "pillow>=10.0.0", "pyautogui>=0.9.54"
+    "sounddevice>=0.4.0", "scipy>=1.12.0", "pillow>=10,<12.0.0", "pyautogui>=0.9.54"
 ]
+
 [tool.flet.android]
 dependencies = []
 target_arch = ["arm64-v8a", "x86_64", "armeabi-v7a"]
 
 [project.optional-dependencies]
-dev = ["flet[test]"]
+dev = ["pytest>=8.0", "flet[test]", "ruff>=0.6", "pyflakes>=3.2", "mypy>=1.11", "bandit>=1.7"]
+ml = ["llama-cpp-python>=0.3", "transformers>=4.40", "sentence-transformers>=2.5"]
+voice = ["pyttsx3>=2.90", "openai-whisper>=20231117"]
+browser = ["playwright>=1.42"]
 
 [tool.setuptools.packages.find]
 include = [
-    "api*",
-    "agents*",
-    "aion_bridge*",
-    "computer*",
-    "core*",
-    "gui*",
-    "knowledge*",
-    "memory*",
-    "observability*",
-    "plugins*",
-    "protocols*",
-    "qwen_integration*",
-    "tools*",
-    "training*",
-    "voice*"
+    "api*", "agents*", "aion_bridge*", "computer*", "core*", "gui*", "knowledge*",
+    "memory*", "observability*", "plugins*", "protocols*", "qwen_integration*",
+    "services*", "security*", "certification*", "tools*", "training*", "voice*"
 ]
 exclude = ["tests*", "data*", "*.tests*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+# Build-blocking correctness gate: undefined names, unused imports, syntax errors,
+# plus the defect classes fixed in the V12.7.2 hotfix batch.
+select = ["F821", "F401", "F841", "E9", "RUF012", "PLE1205"]
+
+[tool.ruff.lint.per-file-ignores]
+# main.py self.logger is the StructuredLogger adapter (event, data) — the PLE1205
+# flags are stdlib-semantics false positives.
+"main.py" = ["PLE1205"]
