@@ -195,11 +195,16 @@
     "schema_max_errors": 32
   },
   "security": {
-    "allow_code_execution": true,
-    "allow_network": true,
-    "allow_shell": true,
+    "allow_code_execution": false,
+    "allow_network": false,
+    "allow_shell": false,
     "allowed_capabilities": [
-      "*"
+      "calculator",
+      "filesystem.read",
+      "memory.read",
+      "memory.write",
+      "model.infer",
+      "tools.read"
     ],
     "allowed_executables": [
       "python",
@@ -217,9 +222,9 @@
       "microphone.capture",
       "camera.capture"
     ],
-    "mode": "autonomous",
-    "require_approval_for_high_risk": false,
-    "sandbox_strict_isolation": false,
+    "mode": "guarded",
+    "require_approval_for_high_risk": true,
+    "sandbox_strict_isolation": true,
     "workspace_root": "data/workspace"
   },
   "self_awareness": {
