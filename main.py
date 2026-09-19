@@ -15,6 +15,7 @@ import time
 import logging
 import hashlib
 import uuid
+import weakref
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -27,6 +28,10 @@ logging.basicConfig(
     handlers=[logging.StreamHandler(sys.stdout)],
 )
 from core.v13.runtime import V13Runtime
+from core.v13.contracts import CapabilityRequest
+from core.polyglot_runtime import PolyglotRuntimeRegistry, RuntimeDescriptor
+from core.platform_frontier import (CapabilityPolicyVerifier, HardwareAbstractionLayer, LocalProfiler, MissionMigrationCodec,
+                                    NativeRuntimeSupervisor, PlatformAttestor, PrefixCache, EncryptedStateSync)
 
 logger = logging.getLogger("jarvis")
 
@@ -72,7 +77,6 @@ try:
     from core.react_engine import ReActEngine
     from core.native_model_loader import NativeModelLoader
     from core.native_backend import NativeInferenceBackend
-    from core.openai_compatible_backend import OpenAICompatibleBackend
     from core.model_swarm import ModelSwarm
     from core.orchestrator import Orchestrator
     from core.predictor import InputPredictor
@@ -127,9 +131,34 @@ try:
     from core.recovery_swarm import RecoverySwarm
     from core.multimodal_runtime import MultimodalRuntime
     from core.multimodal_adapters import VoiceAudioAdapter
+    from core.assistant_capability_suite import AssistantCapabilitySuite
+    from core.native_model_fabric import LocalModelFabric, LocalOnlyOpenAIBackend
+    from core.mission_contract import MissionContract, MissionContractValidator
+    from core.utility_fabric import UtilityFabric
+    from core.context_compressor import ContextCompressor
     from core.system_device import LocalSystemDevice
     from core.memory_fabric import MemoryAddress, MemoryFabric
     from core.autonomous_executive import AutonomousExecutive
+    from core.autonomy_fabric import AutonomyFabric, GoalStore, MissionStore
+    from core.cognitive_fabric import CognitiveFabric
+    from core.feature_registry import FeatureRegistry
+    from core.attention_engine import AttentionEngine
+    from core.goal_engine import GoalEngine
+    from core.experiment_engine import ExperimentEngine
+    from core.provenance_engine import ProvenanceEngine
+    from core.transaction_engine import TransactionEngine
+    from core.creation_fabric import CreationFabric
+    from core.artifact_factory import ArtifactFactory
+    from core.integration_fabric import IntegrationFabric
+    from core.mcp_gateway import MCPGateway
+    from core.browser_fabric import BrowserFabric
+    from core.network_policy import NetworkPolicy
+    from core.device_fabric import DeviceFabric
+    from core.skill_engine import SkillEngine
+    from core.state_timeline import StateTimeline
+    from core.memory_v2 import MemoryV2
+    from core.security_secret import derive_secret
+    from core.aios_fabric import AIOSFabric
     from core.background_cognition import BackgroundCognition
     from core.task_scheduler import TaskScheduler
     from core.self_improvement import SelfImprovementPipeline
@@ -159,6 +188,16 @@ try:
     from observability.slo import SLORegistry
     from core.recovery_engineering import RecoveryEngineering
     from certification.target_machine import TargetMachineCertification
+    from core.distributed_transport import DistributedTaskTransport
+    from core.cognitive_loop import CognitiveLoop
+    from core.agent_reputation import AgentReputationStore
+    from core.system_digital_twin import SystemDigitalTwin
+    from core.skill_manifest import SkillManifestRegistry
+    from security.mtls_identity import MTLSIdentityAuthority
+    from core.cognitive_control_plane import CognitiveControlPlane
+    from core.frontier_fabric import FrontierFabric
+    from protocols.mcp import MCPServer
+    from core.nextgen_platform import NextGenFabric
 except ImportError as exc:
     logger.critical("Mandatory core import failed: %s", exc)
     logger.critical("JARVIS cannot start without the core package.")
@@ -218,14 +257,14 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 # Config loading and path anchoring
 # =============================================================================
 def _anchor_config_paths(cfg: dict, root: Path) -> dict:
-    """Anchor writable runtime state under Flet app storage when packaged.
+    """Anchor writable runtime state under the configured JARVIS data directory.
 
-    When JARVIS is packaged as a Flet desktop app, the working directory may
-    be read-only. This function redirects all data paths to the platform-
-    appropriate writable storage area.
+    The Flutter client is a separate presentation process, so backend state
+    must never depend on GUI-specific application storage. Deployments may
+    override the root with ``JARVIS_RUNTIME_DATA``.
     """
     runtime_root = Path(
-        os.environ.get("FLET_APP_STORAGE_DATA", str(root / "data"))
+        os.environ.get("JARVIS_RUNTIME_DATA", str(root / "data"))
     ).resolve()
     runtime_root.mkdir(parents=True, exist_ok=True)
 
@@ -277,7 +316,7 @@ def _anchor_config_paths(cfg: dict, root: Path) -> dict:
 def _runtime_path(cfg: dict[str, Any], value: str, default: str) -> Path:
     """Resolve a writable runtime path from configuration and package storage.
 
-    Relative paths are anchored beneath the configured Flet application data
+    Relative paths are anchored beneath the configured JARVIS runtime data
     directory (or the repository ``data`` directory during development).
     Absolute paths are preserved so deployments can explicitly select storage.
     """
@@ -287,7 +326,7 @@ def _runtime_path(cfg: dict[str, Any], value: str, default: str) -> Path:
         resolved = path.resolve()
     else:
         runtime_root = Path(
-            os.environ.get("FLET_APP_STORAGE_DATA", str(PROJECT_ROOT / "data"))
+            os.environ.get("JARVIS_RUNTIME_DATA", str(PROJECT_ROOT / "data"))
         ).expanduser().resolve()
         parts = list(path.parts)
         if parts and parts[0].lower() == "data":
@@ -361,7 +400,7 @@ class JARVISCore:
       - Memory management (LanceDB + embeddings)
       - Tool registry with capability-based security
       - Agent orchestration and workflow execution
-      - Voice, GUI, and API surface coordination
+      - Voice, Flutter/API surface coordination
       - Proactive monitoring and self-healing
     """
 
@@ -371,6 +410,23 @@ class JARVISCore:
         self.cfg = cfg
         self.version = self.VERSION
         self.v13_runtime = V13Runtime(cfg)
+        from core.capability_registry import CapabilityRegistry
+        from core.contracts.capability import Capability
+        self.capabilities = CapabilityRegistry()
+        for _name, _module in (("lancedb", "lancedb"), ("embeddings", "sentence_transformers"), ("whisper", "whisper"), ("tts", "pyttsx3"), ("playwright", "playwright")):
+            self.capabilities.register_import(_name, _module)
+        self.v13_runtime.start()
+        self.polyglot_runtimes = PolyglotRuntimeRegistry()
+        self._register_polyglot_runtimes()
+        from core.polyglot_script_runtime import BoundedScriptRuntime
+        self.script_runtime = BoundedScriptRuntime(
+            _runtime_path(cfg, "", "data/workspace"),
+            timeout_seconds=float(cfg.get("scripting", {}).get("timeout_seconds", 30.0)),
+            max_memory_mb=int(cfg.get("scripting", {}).get("max_memory_mb", 512)),
+            allow_network=bool(cfg.get("scripting", {}).get("allow_network", False)),
+            strict_isolation=bool(cfg.get("security", {}).get("sandbox_strict_isolation", True)),
+            max_source_bytes=int(cfg.get("scripting", {}).get("max_source_bytes", 1_000_000)),
+        )
         # Runtime metadata exposed to diagnostics/UI without duplicating state in config files.
         cfg["python_version"] = sys.version.split()[0]
         cfg["import_errors"] = dict(_IMPORT_ERRORS)
@@ -455,9 +511,26 @@ class JARVISCore:
         )
         self.content_trust = ContentTrustEngine() if ContentTrustEngine else None
         self.audit = AuditLog(str(_runtime_path(cfg, sec_cfg.get("audit_log", ""), "data/audit.jsonl")))
+        if hasattr(self, "autopilot"):
+            self.autopilot.audit = self.audit
         self.permission_engine = PermissionEngine(
             secret=os.environ.get("JARVIS_SECURITY_SECRET", "")
         )
+        from core.authorized_autopilot import AuthorizedAutopilot, AutopilotPolicy
+        autopilot_cfg = auto_cfg.get("autopilot", {}) if isinstance(auto_cfg, dict) else {}
+        self.autopilot = AuthorizedAutopilot(
+            self.permission_engine,
+            policy=AutopilotPolicy(
+                enabled=bool(autopilot_cfg.get("enabled", False)),
+                max_runtime_seconds=float(autopilot_cfg.get("max_runtime_seconds", 3600.0)),
+                max_actions=int(autopilot_cfg.get("max_actions", 100)),
+                allowed_capabilities=tuple(str(item) for item in autopilot_cfg.get("allowed_capabilities", [])),
+                emergency_kill=bool(autopilot_cfg.get("emergency_kill", False)),
+            ),
+            audit=self.audit if hasattr(self, "audit") else None,
+        )
+        from core.policy_gateway import PolicyGateway
+        self.policy_gateway = PolicyGateway(self.permission_engine, self.autonomy_engine)
         self.guard = SecurityGuard(
             workspace_root=sec_cfg.get("workspace_root", "data/workspace"),
             allow_shell=sec_cfg.get("allow_shell", False),
@@ -483,9 +556,30 @@ class JARVISCore:
             self.logger.info("integration_hub_initialized", {"version": self.version})
 
         # ------------------------------------------------------------------
-        # Event bus
+        # Event bus + structured lifecycle ownership
         # ------------------------------------------------------------------
         self.event_bus = EventBus()
+        from core.event_fabric import EventFabric
+        self.event_fabric = EventFabric(self.event_bus, str(_runtime_path(cfg, cfg.get("observability", {}).get("event_journal", ""), "data/events.jsonl")), max_events_per_second=int(cfg.get("observability", {}).get("event_rate_limit", 500)))
+        from core.lifecycle_manager import LifecycleManager
+        self.lifecycle = LifecycleManager()
+        self.lifecycle.register("event_bus", self.event_bus)
+
+        core_ref = weakref.ref(self)
+
+        def _bridge_event(event: Any) -> None:
+            core = core_ref()
+            if core is None or core._shutdown:
+                return
+            try:
+                topic = getattr(event, "event_type", None) or getattr(event, "topic", None) or getattr(event, "name", "event")
+                payload = getattr(event, "payload", None) or getattr(event, "data", {})
+                core.v13_runtime.publish(str(topic), dict(payload) if isinstance(payload, dict) else {"value": str(payload)}, correlation_id=getattr(event, "correlation_id", None), causation_id=getattr(event, "causation_id", None))
+            except Exception:
+                core.logger.exception("v13_event_bridge_failed")
+
+        if hasattr(self.event_bus, "subscribe"):
+            self.event_bus.subscribe_event("*", _bridge_event)
 
         # ------------------------------------------------------------------
         # Hardware profiling
@@ -527,6 +621,20 @@ class JARVISCore:
         for m in discovered:
             backend = NativeInferenceBackend(m.path, native_cfg, m)
             self.router.register_backend(m.name, backend, m)
+            try:
+                from core.native_model_fabric import LocalModelProfile
+                self.local_model_fabric.register(
+                    LocalModelProfile(
+                        name=m.name, path=m.path, backend="llama.cpp",
+                        capabilities=tuple(getattr(m, "capabilities", None) or ("chat", "general")),
+                        context_length=int(getattr(m, "context_length", 4096) or 4096),
+                        memory_mb=max(1, int(getattr(m, "size_bytes", 0) / 1_048_576)),
+                        quality_score=0.80,
+                    ),
+                    backend,
+                )
+            except Exception as exc:
+                self.logger.warning("local_model_fabric_attach_failed", {"model": m.name, "error": str(exc)})
 
         if discovered:
             best = self.swarm.select_best(self.profiler.vram_free_gb, "general")
@@ -534,7 +642,9 @@ class JARVISCore:
                 self.router.set_primary(best.name)
                 self.logger.info("auto_selected_model", {"model": best.name})
 
-        self._register_external_backends(cfg)
+        self._register_local_backends(cfg)
+        from core.adaptive_router import AdaptiveRouter
+        self.adaptive_router = AdaptiveRouter(self.model_intelligence, self.router, memory_mb_provider=lambda: int(max(0.0, self.profiler.vram_free_gb) * 1024))
         for backend in self.router.list_backends():
             name = str(backend.get("name", ""))
             kind = str(backend.get("type", ""))
@@ -668,6 +778,7 @@ class JARVISCore:
                     allow_shell=bool(sec_cfg.get("allow_shell", False)),
                     allow_code_execution=bool(sec_cfg.get("allow_code_execution", True)),
                     allow_network=bool(sec_cfg.get("allow_network", True)),
+                    strict_isolation=bool(sec_cfg.get("sandbox_strict_isolation", False)),
                     max_timeout_seconds=int(sec_cfg.get("execution_timeout_seconds", 300)),
                     max_output_bytes=int(sec_cfg.get("execution_max_output_bytes", 100000)),
                     workspace_root=self.guard.workspace,
@@ -675,6 +786,7 @@ class JARVISCore:
                 permission_engine=self.permission_engine,
                 schema_validator=self.schema_validator,
                 autonomy_engine=self.autonomy_engine,
+                policy_gateway=self.policy_gateway,
             )
             if self.hub is not None:
                 # Bind the composition hub to the same authoritative execution broker used by tools/jobs.
@@ -685,6 +797,18 @@ class JARVISCore:
         except Exception as exc:
             self.logger.error("reliability_primitives_init_failed", {"error": str(exc)})
             raise
+
+        network_cfg = cfg.get("network") or {}
+        self.network_policy = NetworkPolicy(
+            allow_private=bool(network_cfg.get("allow_private", False)),
+            allow_localhost=bool(network_cfg.get("allow_localhost", False)),
+            allow_metadata_endpoints=bool(network_cfg.get("allow_metadata_endpoints", False)),
+            max_response_size_bytes=int(network_cfg.get("max_response_size_bytes", 10_000_000)),
+            request_timeout_seconds=float(network_cfg.get("request_timeout_seconds", 30.0)),
+            max_redirects=int(network_cfg.get("max_redirects", 5)),
+            allowed_hosts=tuple(str(v).lower() for v in network_cfg.get("allowed_hosts", []) if isinstance(v, str)),
+        )
+        self.browser_fabric = BrowserFabric(self.network_policy)
 
         # ------------------------------------------------------------------
         # Tool registry
@@ -770,7 +894,9 @@ class JARVISCore:
         if len(distributed_secret) < 32:
             distributed_secret = hashlib.sha256(self.memory_fabric.secret_bytes).digest() if hasattr(self.memory_fabric, "secret_bytes") else os.urandom(32)
         self.worker_identity = WorkerIdentityAuthority(distributed_secret)
+        self.mtls_identity = MTLSIdentityAuthority(common_name="jarvis-ca", ttl_seconds=float(v127_cfg.get("worker_certificate_ttl_seconds", 86400)))
         self.distributed_queue = DurableDistributedQueue(str(_runtime_path(cfg, "", "data/distributed_queue.db")), max_depth=int(cfg.get("reliability", {}).get("max_job_queue_depth", 500)))
+        self.distributed_transport = DistributedTaskTransport(self.distributed_queue)
         self.sandbox_profiles = SandboxProfileRegistry()
         self.world_reasoner = WorldReasoner(self.temporal_world)
         self.long_horizon_planner = LongHorizonPlanner()
@@ -784,6 +910,90 @@ class JARVISCore:
         self.slo = SLORegistry()
         self.recovery_engineering = RecoveryEngineering()
         self.target_machine_certification = TargetMachineCertification()
+        self.agent_reputation = AgentReputationStore(max_agents=int(v127_cfg.get("max_agent_reputations", 1000)))
+        self.system_digital_twin = SystemDigitalTwin(max_samples=int(cfg.get("observability", {}).get("max_telemetry_samples", 2048)))
+        self.skill_manifests = SkillManifestRegistry(max_skills=int(cfg.get("plugins", {}).get("max_skills", 2048)))
+        self.feature_registry = FeatureRegistry(PROJECT_ROOT)
+        self.cognitive_control_plane = CognitiveControlPlane(
+            max_goals=int(cfg.get("autonomy", {}).get("max_goals", 1000)),
+            max_checkpoints=int(cfg.get("reliability", {}).get("max_state_snapshots", 32)),
+            max_agent_history=int(cfg.get("v12_7", {}).get("max_agent_reputations", 1000)),
+        )
+        frontier_root = _runtime_path(cfg, "", "data")
+        frontier_secret = derive_secret("identity", os.environ.get("JARVIS_IDENTITY_SECRET"), os.environ.get("JARVIS_MASTER_SECRET"))
+        self.frontier = FrontierFabric(state_root=str(frontier_root), identity_secret=frontier_secret)
+        platform_root = frontier_root
+        platform_key = derive_secret("platform-state", os.environ.get("JARVIS_PLATFORM_SECRET"), os.environ.get("JARVIS_MASTER_SECRET"))
+        from core.long_term_workers import LongTermWorkerManager
+        self.long_term_workers = LongTermWorkerManager(
+            _runtime_path(cfg, "", "data/long_term_workers.jsonl"),
+            max_workers=int(auto_cfg.get("max_long_term_workers", 64)),
+        )
+
+        self.platform_frontier = {
+            "profiler": LocalProfiler(),
+            "attestor": PlatformAttestor(),
+            "state_sync": EncryptedStateSync(platform_root / "platform_sync.db", platform_key),
+            "migration": MissionMigrationCodec(platform_key),
+            "prefix_cache": PrefixCache(
+                max_entries=int(cfg.get("inference", {}).get("prefix_cache_entries", 128)),
+                max_bytes=int(cfg.get("inference", {}).get("prefix_cache_bytes", 256 * 1024 * 1024)),
+            ),
+            "policy_verifier": CapabilityPolicyVerifier(),
+            "hardware": HardwareAbstractionLayer(),
+            "native_supervisor": NativeRuntimeSupervisor(
+                "native-inference",
+                lambda: bool(getattr(self.model_router, "available_backends", lambda: ())()),
+            ),
+        }
+        nextgen_key = derive_secret("nextgen", os.environ.get("JARVIS_NEXTGEN_SECRET"), os.environ.get("JARVIS_MASTER_SECRET"))
+        self.nextgen = NextGenFabric(frontier_root, nextgen_key)
+        self.mcp_server = MCPServer(self.registry, task_registry=self.frontier.mcp_tasks)
+        # State-of-the-art cognitive/integration/creation fabrics. These are
+        # authoritative registries and validation layers; execution remains
+        # behind Policy Gateway and Execution Broker.
+        self.attention_engine = AttentionEngine()
+        self.goal_engine = GoalEngine()
+        self.experiment_engine = ExperimentEngine()
+        self.provenance_engine = ProvenanceEngine()
+        self.transaction_engine = TransactionEngine()
+        self.integration_fabric = IntegrationFabric()
+        self.mcp_gateway = MCPGateway(self.integration_fabric)
+        self.device_fabric = DeviceFabric()
+        self.utility_fabric = UtilityFabric(_runtime_path(cfg, "", "data/workspace"))
+        self.mission_contract_validator = MissionContractValidator()
+        self.local_model_fabric = LocalModelFabric(
+            tuple(str(item) for item in cfg.get("native", {}).get("model_dirs", [])),
+            memory_provider=lambda: int(max(0.0, self.profiler.vram_free_gb) * 1024),
+        )
+        self.local_model_fabric.discover_gguf()
+        self.assistant_capabilities = AssistantCapabilitySuite(_runtime_path(cfg, "", "data/generated"))
+        self.skill_engine = SkillEngine()
+        from core.skill_manifest import SkillManifest
+        for _manifest in (
+            SkillManifest("analysis", "1.0.0", "python", ("tools.read", "inference"), {"text": "string"}, {"result": "object"}, 1),
+            SkillManifest("distributed_worker", "1.0.0", "go", ("distributed.execute",), {"task": "object"}, {"result": "object"}, 3),
+            SkillManifest("sandboxed_script", "1.0.0", "lua", ("script.execute",), {"source": "string"}, {"result": "object"}, 2),
+        ):
+            try:
+                self.skill_manifests.register(_manifest)
+            except ValueError:
+                self.logger.debug("skill_manifest_registration_skipped", extra={"skill": _manifest.name})
+        self.state_timeline = StateTimeline(int(cfg.get("reliability", {}).get("max_state_snapshots", 32)))
+        feature_audit = self.feature_registry.audit()
+        self.feature_coverage = feature_audit.coverage
+        self.logger.info("feature_coverage_audit", {"coverage_percent": round(feature_audit.coverage, 2), "complete": feature_audit.complete, "total": feature_audit.total, "incomplete": feature_audit.incomplete})
+
+        self.cognitive_loop = CognitiveLoop(
+            perceive=self._cognitive_perceive,
+            remember=self._cognitive_remember,
+            reason=self._cognitive_reason,
+            plan=self._cognitive_plan,
+            authorize=self._cognitive_authorize,
+            act=self._cognitive_act,
+            verify=self._cognitive_verify,
+            learn=self._cognitive_learn,
+        )
 
         self.computer_use = None
         if bool(v127_cfg.get("computer_use_enabled", False)):
@@ -791,11 +1001,55 @@ class JARVISCore:
                 self.computer_use = ComputerUseController(PyAutoGUIAdapter())
             except Exception as exc:
                 self.logger.warning("computer_use_init_failed", {"error": str(exc)})
+        autonomy_fabric_cfg = autonomy_data.get("fabric", {}) or {}
+        self.autonomy_fabric = AutonomyFabric(
+            GoalStore(str(_runtime_path(cfg, autonomy_fabric_cfg.get("goals_path", ""), "data/goals.json"))),
+            MissionStore(str(_runtime_path(cfg, autonomy_fabric_cfg.get("missions_path", ""), "data/missions.json"))),
+            event_sink=self.event_fabric.publish,
+            policy_engine=self.autonomy_engine,
+        )
+        from core.mission_authority import MissionAuthority, MissionExecutionPolicy
+        self.mission_authority = MissionAuthority(self.autonomy_fabric, policy=MissionExecutionPolicy(max_steps=int(budget_cfg.get("max_steps", 100)), max_duration_seconds=float(budget_cfg.get("max_runtime_seconds", 7200))))
+        aios_cfg = cfg.get("aios", {}) or {}
+        self.aios = AIOSFabric(
+            state_path=str(_runtime_path(cfg, aios_cfg.get("state_path", ""), "data/jarvis_state.json")),
+            knowledge_path=str(_runtime_path(cfg, aios_cfg.get("knowledge_path", ""), "data/self_knowledge_graph.json")),
+            node_secret=derive_secret("node", os.environ.get("JARVIS_NODE_SECRET"), os.environ.get("JARVIS_MASTER_SECRET")),
+            skill_secret=derive_secret("skill", os.environ.get("JARVIS_SKILL_SECRET"), os.environ.get("JARVIS_MASTER_SECRET")),
+            state_secret=derive_secret("state", os.environ.get("JARVIS_STATE_SECRET"), os.environ.get("JARVIS_MASTER_SECRET")),
+            event_sink=self.event_fabric.publish,
+        )
+        self.aios.register_state_domain("goals", self.autonomy_fabric.goals.export_state, self.autonomy_fabric.goals.import_state)
+        for feature in self.feature_registry.records():
+            self.aios.knowledge.add_node(f"feature:{feature.key}", title=feature.title, milestone=feature.milestone, critical=feature.critical)
+            self.aios.knowledge.add_edge("aios", "provides", f"feature:{feature.key}")
+        self.aios.register_state_domain("missions", self.autonomy_fabric.missions.export_state, self.autonomy_fabric.missions.import_state)
+        self.capabilities.register(Capability("aios.platform", permissions=("platform:observe",)))
+        self.capabilities.register(Capability("aios.compute", permissions=("compute:use",)))
+        self.capabilities.register(Capability("aios.state", permissions=("state:export",)))
+        self.capabilities.register(Capability("aios.skills", permissions=("skill:manage",)))
+        self.capabilities.register(Capability("aios.evaluation", permissions=("evaluation:run",)))
+        self.capabilities.register(Capability("autonomy.goals", permissions=("mission:manage",)))
+        self.capabilities.register(Capability("autonomy.missions", permissions=("mission:execute",)))
+        self.capabilities.register(Capability("autonomy.verification", permissions=("mission:verify",)))
+
         self.executive = AutonomousExecutive(
-            self.autonomy_engine, self.world_model, self.device_gateway, self.model_intelligence, self.recovery_swarm,
+            self.autonomy_engine,
+            self.world_model,
+            self.device_gateway,
+            self.model_intelligence,
+            self.recovery_swarm,
             self._execute_autonomous_mission,
             max_goals=int(autonomy_data.get("max_goals", 1000)),
             max_parallel_missions=int(autonomy_data.get("max_parallel_missions", 2)),
+            state_path=str(
+                _runtime_path(
+                    cfg,
+                    autonomy_data.get("executive_state_path", ""),
+                    "data/autonomous_executive.json",
+                )
+            ),
+            fabric=self.autonomy_fabric,
         )
         self.task_scheduler = TaskScheduler(lambda goal, priority, metadata: self.executive.submit_goal(goal, priority=priority, metadata=metadata))
         self.background_cognition = BackgroundCognition(
@@ -845,6 +1099,71 @@ class JARVISCore:
             self.rag3 = RAGEngine(retriever=self.retriever, router=self.router, content_trust=self.content_trust)
         except Exception as exc:
             self.logger.warning("rag_init_failed", {"error": str(exc)})
+
+        # ------------------------------------------------------------------
+        # Unified Intelligence Plane — Phase B
+        # ------------------------------------------------------------------
+        from core.context_manager import ContextManager
+        from core.evaluation_engine import EvaluationEngine
+        from core.memory_lifecycle import MemoryKind, MemoryLifecycleManager
+        from core.model_residency import ModelResidencyManager
+        from core.cognitive_runtime import UnifiedCognitiveRuntime
+        intelligence_cfg = cfg.get("intelligence", {}) or {}
+        self.model_residency = ModelResidencyManager(intelligence_cfg.get("model_residency_capacity", 2))
+        from core.intelligence_gateway import GatewayConfig, IntelligenceGateway
+        gateway_cfg = GatewayConfig(
+            max_prompt_chars=int(intelligence_cfg.get("max_prompt_chars", 200_000)),
+            max_cache_entries=int(intelligence_cfg.get("inference_cache_entries", 128)),
+            cache_ttl_seconds=float(intelligence_cfg.get("inference_cache_ttl_seconds", 30.0)),
+            max_inflight=int(intelligence_cfg.get("inference_max_inflight", 4)),
+            max_latency_samples=int(intelligence_cfg.get("inference_latency_samples", 2_000)),
+            residency_capacity=int(intelligence_cfg.get("model_residency_capacity", 2)),
+        )
+        self.intelligence_gateway = IntelligenceGateway(
+            self.router,
+            chooser=self.model_intelligence,
+            residency=self.model_residency,
+            config=gateway_cfg,
+            event_sink=lambda event_type, payload: self.event_bus.publish(event_type, payload, source="jarvis.intelligence_gateway"),
+        )
+        memory_namespace_secret = self.memory_fabric.secret_bytes if getattr(self, "memory_fabric", None) is not None else derive_secret("cognitive-memory", os.environ.get("JARVIS_MEMORY_SECRET"), os.environ.get("JARVIS_MASTER_SECRET"))
+        self.cognitive_memory = MemoryV2(max_items=int(intelligence_cfg.get("max_memory_items", 20_000)), secret=memory_namespace_secret)
+        self.context_manager = ContextManager(memory=self.cognitive_memory, retriever=self.rag3, max_items=int(intelligence_cfg.get("max_context_items", 24)), event_bus=self.event_bus)
+        self.memory_lifecycle = MemoryLifecycleManager(
+            max_records=int(intelligence_cfg.get("max_memory_records", 10000)),
+            journal_path=str(_runtime_path(cfg, intelligence_cfg.get("memory_journal", ""), "data/memory_lifecycle.json")),
+        )
+        self.evaluation_engine = EvaluationEngine(max_cases=int(intelligence_cfg.get("max_evaluation_cases", 1000)))
+        self.context_compressor = ContextCompressor(
+            max_chars=int(intelligence_cfg.get("context_compression_chars", 24_000)),
+            max_items=int(intelligence_cfg.get("context_compression_items", 24)),
+        )
+        self.cognitive_runtime = UnifiedCognitiveRuntime(
+            context_manager=self.context_manager, router=self.router, memory=self.cognitive_memory, event_bus=self.event_bus,
+            system_prompt_provider=lambda _text: self.persona_manager.get_prompt(self.persona),
+            intelligence_gateway=self.intelligence_gateway,
+        )
+        self.cognitive_fabric = CognitiveFabric(
+            context=self.context_manager,
+            router=self.router,
+            memory=self.memory,
+            cognitive_runtime=self.cognitive_runtime,
+            event_sink=self.event_fabric.publish,
+            episode_path=str(_runtime_path(cfg, intelligence_cfg.get("episode_path", ""), "data/cognitive_episodes.json")),
+            permissions=self.permission_engine,
+            autonomy=self.autonomy_engine,
+            canonical_memory=self.cognitive_memory,
+            model_intelligence=self.model_intelligence,
+        )
+        self.aios.register_state_domain("cognitive_episodes", self.cognitive_fabric.episodes.export_state, self.cognitive_fabric.episodes.import_state)
+        self.aios.register_state_domain("cognitive_memory", self.cognitive_fabric.memory.export_state, self.cognitive_fabric.memory.import_state)
+        self.capabilities.register(Capability("intelligence.episode", permissions=("cognition:episode",)))
+        self.capabilities.register(Capability("security.policy_gateway", permissions=("security:authorize",)))
+        self.capabilities.register(Capability("planning.hierarchical", permissions=("planning:execute",)))
+        self.capabilities.register(Capability("intelligence.context", permissions=("read:context",)))
+        self.capabilities.register(Capability("intelligence.cognition", permissions=("inference",)))
+        self.capabilities.register(Capability("intelligence.evaluation", permissions=("evaluate",)))
+        self.logger.info("phase_b_intelligence_initialized", {"version": self.version})
 
         # ------------------------------------------------------------------
         # Voice subsystem
@@ -925,6 +1244,8 @@ class JARVISCore:
         self.benchmark_lab = None
         self.multi_gpu = None
         self.hardware_cert = None
+        self.artifact_factory = None
+        self.mission_contracts: dict[str, MissionContract] = {}
 
         _subsystems = [
             ("checkpoint", lambda: CheckpointManager()),
@@ -958,6 +1279,28 @@ class JARVISCore:
                 setattr(self, name, factory())
             except Exception as exc:
                 self.logger.warning(f"{name}_init_failed", {"error": str(exc)})
+
+        # Creation Fabric is deliberately connected to the validated
+        # AutoProgrammer, never to raw model output. Generated source remains
+        # untrusted until CreationFabric and sandbox validation succeed.
+        def _trusted_generator(name: str, kind: str, description: str) -> str:
+            if self.auto_programmer is None:
+                raise RuntimeError("auto programmer is unavailable")
+            result = self.auto_programmer.generate_tool(description, name=name)
+            if not bool(result.get("ok")):
+                raise ValueError(str(result.get("error", "generation failed")))
+            code = result.get("code")
+            if not isinstance(code, str):
+                raise TypeError("generator returned invalid source")
+            return code
+
+        self.creation_fabric = CreationFabric(
+            _runtime_path(cfg, "", "data/generated"),
+            generator=_trusted_generator,
+            permission_engine=self.permission_engine,
+        )
+
+        self.artifact_factory = ArtifactFactory(self.creation_fabric)
 
         # Cached Doctor for CLI/GUI reuse
         self.doctor = Doctor()
@@ -1023,8 +1366,8 @@ class JARVISCore:
             ("system", "system_service", lambda: SystemService(self)),
             ("chat", "chat_service", lambda: ChatService(self.chat)),
             ("voice", "voice_service", lambda: VoiceService(self.stt, self.tts, getattr(self, "wake", None), self.chat)),
-            ("workflow", "workflow_service", lambda: WorkflowService(self.workflows, self.tool_service, self.agent_service)),
-            ("mission", "mission_service", lambda: MissionService(self.tool_service, self.agent_service, self.job_engine, self.autonomy_engine)),
+            ("workflow", "workflow_service", lambda: WorkflowService(self.workflows, self.tool_service, self.agent_service, persistence_dir=str(self.guard.workspace / "workflows"))),
+            ("mission", "mission_service", lambda: MissionService(self.tool_service, self.agent_service, self.job_engine, self.autonomy_engine, self.autonomy_fabric)),
         ]
         try:
             from services.tool_service import ToolService
@@ -1114,28 +1457,34 @@ class JARVISCore:
     # ------------------------------------------------------------------
     # External backend registration
     # ------------------------------------------------------------------
-    def _register_external_backends(self, cfg: dict) -> None:
-        """Register OpenAI-compatible external backends from config."""
-        for backend_cfg in cfg.get("external_backends", []):
+    def _register_local_backends(self, cfg: dict) -> None:
+        """Register only loopback local OpenAI-compatible inference servers.
+
+        The current trunk is native/local-only. Any non-loopback provider endpoint
+        is rejected before registration; future cloud adapters belong outside the
+        core runtime and may not become implicit fallbacks.
+        """
+        for backend_cfg in cfg.get("local_backends", []):
             if not backend_cfg.get("enabled", False):
                 continue
-            name = backend_cfg["name"]
-            api_key = os.environ.get(backend_cfg.get("api_key_env", ""), "")
+            name = str(backend_cfg.get("name", "")).strip()
+            base_url = str(backend_cfg.get("base_url", "")).strip()
+            host = base_url.split("://", 1)[-1].split("/", 1)[0].split(":", 1)[0]
+            if host not in {"127.0.0.1", "localhost", "::1"}:
+                self.logger.warning("cloud_backend_blocked", {"backend": name, "host": host})
+                continue
             try:
-                backend = OpenAICompatibleBackend(
-                    base_url=backend_cfg["base_url"],
-                    api_key=api_key,
-                    model=backend_cfg.get("model", "default"),
-                    timeout=backend_cfg.get("timeout", 120.0),
+                backend = LocalOnlyOpenAIBackend(
+                    base_url=base_url,
+                    model=str(backend_cfg.get("model", "default")),
+                    timeout_seconds=float(backend_cfg.get("timeout", 120.0)),
                 )
                 self.router.register_backend(name, backend)
                 if backend_cfg.get("primary", False):
                     self.router.set_primary(name)
-                    self.logger.info("external_primary_set", {"backend": name})
+                    self.logger.info("local_primary_set", {"backend": name})
             except Exception as exc:
-                self.logger.error(
-                    "external_backend_failed", {"backend": name, "error": str(exc)}
-                )
+                self.logger.error("local_backend_failed", {"backend": name, "error": str(exc)})
 
     # ------------------------------------------------------------------
     # Health check for watchdog
@@ -1146,6 +1495,71 @@ class JARVISCore:
             return self.router.primary is not None or len(self.router.list_backends()) > 0
         except Exception:
             return False
+
+    def _cognitive_perceive(self, text: str) -> dict[str, Any]:
+        """Collect bounded environmental context for the cognitive loop."""
+        try:
+            snapshot = self.profiler.snapshot() if hasattr(self.profiler, "snapshot") else {}
+        except Exception:
+            snapshot = {}
+        self.cognitive_control_plane.begin(text, evidence=("world_model",), assumptions=("local_execution",))
+        self.frontier.black_box.record("cognitive.perceive", {"text_length": len(text), "session": self.current_session})
+        for metric, value in (("cpu_percent", snapshot.get("cpu_percent", 0.0)), ("memory_percent", snapshot.get("memory_percent", 0.0)), ("gpu_percent", snapshot.get("gpu_percent", 0.0))):
+            try:
+                self.cognitive_control_plane.observe_resource(metric, float(value))
+            except (TypeError, ValueError):
+                continue
+        return {"text_length": len(text), "world": self.world_reasoner.explain("host"), "resources": snapshot, "forecast": self.cognitive_control_plane.predictor.snapshot(), "digital_twin": self.system_digital_twin.snapshot(), "multimodal": self.multimodal_stream.snapshot()}
+
+    def _cognitive_remember(self, text: str, perception: dict[str, Any]) -> dict[str, Any]:
+        """Store a minimal episodic trace in cryptographically namespaced memory."""
+        from core.memory_v2 import MemoryClass, MemoryItem
+        workspace = str(getattr(self.guard, "workspace", PROJECT_ROOT))
+        item = MemoryItem.create(owner="local", workspace=workspace, session_id=self.current_session, kind=MemoryClass.EPISODIC, content=text[:10_000], source="cognitive.loop", confidence=0.8, importance=0.5)
+        self.cognitive_memory.add(item)
+        recent = self.cognitive_memory.query(owner="local", workspace=workspace, session_id=self.current_session, limit=8)
+        return {"memory_ids": [row.memory_id for row in recent], "recent": [row.content[:500] for row in recent]}
+
+    def _cognitive_reason(self, text: str, memory: dict[str, Any]) -> dict[str, Any]:
+        """Produce explainable routing/world-reasoning context without side effects."""
+        self.cognitive_control_plane.transition("reason", uncertainty=0.25)
+        decision = self.adaptive_router.choose(text, privacy="local")
+        firewall = self.cognitive_control_plane.firewall.inspect(text, source="user")
+        return {"task_type": decision.task_type, "model": decision.model, "reason": decision.reason, "memory_count": len(memory.get("memory_ids", [])), "world": self.world_reasoner.explain("host"), "prompt_firewall": firewall}
+
+    def _cognitive_plan(self, text: str, reasoning: dict[str, Any]) -> dict[str, Any]:
+        """Build a safe analysis-only plan; execution-capable plans require explicit tools elsewhere."""
+        self.cognitive_control_plane.transition("plan", uncertainty=0.2)
+        return {"action": "analysis", "capability": "tools.read", "risk": "low", "model": reasoning.get("model"), "text": text[:2_000], "verification_required": True}
+
+    def _cognitive_authorize(self, plan: dict[str, Any]) -> dict[str, Any]:
+        """Authorize the analysis plan through the V13 policy gateway."""
+        try:
+            decision = self.v13_runtime.authorize(CapabilityRequest(str(plan.get("capability", "tools.read")), reason="cognitive analysis", risk=str(plan.get("risk", "low"))))
+            return {"approved": bool(decision.allowed), "reason": decision.reason}
+        except Exception as exc:
+            return {"approved": False, "reason": type(exc).__name__}
+
+    def _cognitive_act(self, plan: dict[str, Any]) -> dict[str, Any]:
+        """Execute the non-mutating analysis action."""
+        return {"ok": True, "action": plan.get("action", "analysis"), "model": plan.get("model"), "mutated": False}
+
+    @staticmethod
+    def _cognitive_verify(plan: dict[str, Any], action: dict[str, Any]) -> dict[str, Any]:
+        """Verify that analysis remained non-mutating and returned a valid result."""
+        return {"ok": bool(action.get("ok")) and action.get("mutated") is False and plan.get("action") == action.get("action"), "policy": "analysis-only"}
+
+    def _cognitive_learn(self, trace: Any) -> dict[str, Any]:
+        """Record outcome telemetry and agent-neutral model routing evidence."""
+        try:
+            if trace.verification.get("ok") and trace.reasoning.get("model"):
+                self.slo.observe(trace.duration_ms, True)
+            self.cognitive_control_plane.transition("learn", uncertainty=0.1)
+            self.cognitive_control_plane.register_provenance(trace.input_text[:500], "cognitive.turn", trust=0.9)
+            self.frontier.black_box.record("cognitive.learn", {"success": bool(trace.success), "model": trace.reasoning.get("model")})
+        except Exception:
+            self.logger.debug("cognitive_learning_telemetry_failed", exc_info=True)
+        return {"recorded": True, "success": bool(trace.success)}
 
     def run_agent_swarm(self, tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Run bounded specialist tasks concurrently through the shared agent executor.
@@ -1210,11 +1624,19 @@ class JARVISCore:
             raise ValueError("agent task cannot be empty")
         agent_name = str(arguments.get("agent_name") or "general")
         mission_id = arguments.get("mission_id")
-        if self.react is not None:
-            return self.react.run(task, agent_name=agent_name, mission_id=mission_id)
-        if self.orchestrator is None:
-            raise RuntimeError("orchestrator unavailable")
-        return self.orchestrator.run_task(task)
+        started = time.perf_counter()
+        try:
+            if self.react is not None:
+                result = self.react.run(task, agent_name=agent_name, mission_id=mission_id)
+            else:
+                if self.orchestrator is None:
+                    raise RuntimeError("orchestrator unavailable")
+                result = self.orchestrator.run_task(task)
+            self.agent_reputation.observe(agent_name, success=True, latency_ms=(time.perf_counter() - started) * 1000.0, safety_score=1.0)
+            return result
+        except Exception:
+            self.agent_reputation.observe(agent_name, success=False, latency_ms=(time.perf_counter() - started) * 1000.0, safety_score=0.0)
+            raise
 
     def _register_agent_policies(self) -> None:
         """Install default autonomous policies after all tools are registered."""
@@ -1311,6 +1733,46 @@ class JARVISCore:
                 )
             )
 
+        # Safe native utilities
+        def utility_json_format(value: str) -> dict[str, Any]:
+            result = self.utility_fabric.json_format(value)
+            return result.value if result.ok else {"ok": False, "error": result.error}
+
+        def utility_text_stats(value: str) -> dict[str, Any]:
+            result = self.utility_fabric.text_stats(value)
+            return result.value if result.ok else {"ok": False, "error": result.error}
+
+        def utility_file_sha256(path: str) -> dict[str, Any]:
+            result = self.utility_fabric.file_sha256(path)
+            return result.value if result.ok else {"ok": False, "error": result.error}
+
+        def utility_disk_snapshot() -> dict[str, Any]:
+            result = self.utility_fabric.disk_snapshot()
+            return result.value if result.ok else {"ok": False, "error": result.error}
+
+        def utility_file_info(path: str) -> dict[str, Any]:
+            result = self.utility_fabric.file_info(path)
+            return result.value if result.ok else {"ok": False, "error": result.error}
+
+        def utility_directory_inventory(path: str = ".", limit: int = 1000) -> dict[str, Any]:
+            result = self.utility_fabric.directory_inventory(path, limit)
+            return result.value if result.ok else {"ok": False, "error": result.error}
+
+        def utility_current_time() -> dict[str, Any]:
+            return self.utility_fabric.current_time().value
+
+        utility_specs = {
+            "utility_json_format": ("Format and validate JSON locally", schema({"value": {"type": "string", "maxLength": 2_000_000}}, ("value",)), utility_json_format),
+            "utility_text_stats": ("Compute local text statistics", schema({"value": {"type": "string", "maxLength": 2_000_000}}, ("value",)), utility_text_stats),
+            "utility_file_sha256": ("Hash a workspace file with SHA-256", schema({"path": {"type": "string", "maxLength": 1024}}, ("path",)), utility_file_sha256),
+            "utility_disk_snapshot": ("Read local disk capacity metrics", schema({}, ()), utility_disk_snapshot),
+            "utility_file_info": ("Inspect metadata for a workspace file", schema({"path": {"type": "string", "maxLength": 1024}}, ("path",)), utility_file_info),
+            "utility_directory_inventory": ("Inventory a bounded workspace directory", schema({"path": {"type": "string", "maxLength": 1024}, "limit": {"type": "integer", "minimum": 1, "maximum": 10000}}, ()), utility_directory_inventory),
+            "utility_current_time": ("Read local system time", schema({}, ()), utility_current_time),
+        }
+        for name, (description, parameters, handler) in utility_specs.items():
+            self.registry.register(ToolSpec(name=name, description=description, parameters=parameters, handler=handler, capabilities=["utilities.local"], risk=RiskLevel.LOW))
+
         # Shell
         if shell_tool:
             def secure_shell(
@@ -1400,6 +1862,7 @@ class JARVISCore:
 
         # Browser automation
         if BrowserAutomation:
+            browser_policy = getattr(self, "network_policy", NetworkPolicy())
             self.registry.register(
                 ToolSpec(
                     name="browser",
@@ -1408,7 +1871,7 @@ class JARVISCore:
                         {"url": {"type": "string", "minLength": 1, "maxLength": 4096}},
                         ("url",),
                     ),
-                    handler=BrowserAutomation().navigate,
+                    handler=BrowserAutomation(policy=browser_policy, allowed_hosts=browser_policy.allowed_hosts).navigate,
                     capabilities=["browser"],
                     risk=RiskLevel.HIGH,
                 )
@@ -1623,6 +2086,19 @@ class JARVISCore:
             runtime = self.autonomy_engine.get_mission(mission_id)
             if runtime is not None:
                 owner = str(runtime.metadata.get("owner") or owner)
+        contract_id = mission_id or f"mission-{uuid.uuid4().hex[:12]}"
+        contract = self.mission_contracts.get(contract_id)
+        if contract is None:
+            contract = MissionContract(
+                contract_id, str(goal), allowed_capabilities=("observe", "memory.read", "memory.write", "utilities.local"),
+                max_steps=int(self.cfg.get("autonomy", {}).get("budget", {}).get("max_steps", 100)),
+                max_runtime_seconds=float(self.cfg.get("autonomy", {}).get("budget", {}).get("max_runtime_seconds", 7200)),
+            )
+            self.mission_contracts[contract_id] = contract
+        ok, reasons = self.mission_contract_validator.validate(contract, ("observe",))
+        if not ok:
+            raise PermissionError("mission contract rejected: " + ",".join(reasons))
+        self.logger.info("mission_contract_bound", {"mission_id": contract_id, "digest": contract.digest()})
         return asyncio.run(self.mission_service.execute_mission(goal, mission_id=mission_id, owner=owner))
 
     def _start_proactive_monitoring(self) -> None:
@@ -1733,6 +2209,41 @@ class JARVISCore:
                 {"session": sid, "threats": [t.category for t in threats]},
             )
 
+        # Canonical non-streaming path: GUI/API chat enters the same cognitive
+        # episode kernel used by programmatic cognition. Streaming remains on
+        # the dedicated incremental backend path until streaming episodes are
+        # represented as first-class append-only chunks.
+        if not stream and getattr(self, "cognitive_fabric", None) is not None:
+            cognitive = self.cognitive_request(cleaned_message, session_id=sid, max_tokens=int(self.cfg.get("observability", {}).get("token_accounting", {}).get("max_completion_tokens", 4096)))
+            text = str(cognitive.get("output", ""))
+            if not text and cognitive.get("error"):
+                text = f"[Cognitive error: {cognitive['error']}]"
+            model_name = str(cognitive.get("model", "unknown"))
+            request_id = str(cognitive.get("request_id", uuid.uuid4().hex))
+            prompt_tokens = max(1, (len(cleaned_message.encode("utf-8")) + 3) // 4)
+            completion_tokens = max(1, (len(text.encode("utf-8")) + 3) // 4)
+            try:
+                self.token_ledger.preflight(session_id=sid, model=model_name, prompt_tokens=prompt_tokens, max_completion_tokens=completion_tokens)
+                if not text.startswith("["):
+                    from core.token_accounting import TokenUsage
+                    self.token_ledger.record(TokenUsage(request_id=request_id, session_id=sid, model=model_name, backend=str(cognitive.get("model", "cognitive")), prompt_tokens=prompt_tokens, completion_tokens=completion_tokens))
+            except Exception:
+                self.logger.debug("cognitive_token_accounting_failed", {"session": sid}, exc_info=True)
+            if self.memory:
+                try:
+                    if getattr(self, "memory_fabric", None):
+                        address = MemoryAddress("jarvis", str(self.guard.workspace), sid, "conversation")
+                        self.memory_fabric.put_event(address, "user", cleaned_message)
+                        self.memory_fabric.put_event(address, "assistant", text)
+                        self.memory_governance.register(f"{sid}:user:{time.time_ns()}", f"conversation:{sid}", cleaned_message, source="user")
+                        self.memory_governance.register(f"{sid}:assistant:{time.time_ns()}", f"conversation:{sid}", text, source="assistant")
+                    else:
+                        self.memory.add(sid, "user", cleaned_message)
+                        self.memory.add(sid, "assistant", text)
+                except Exception:
+                    self.logger.debug("cognitive_legacy_memory_bridge_failed", {"session": sid}, exc_info=True)
+            return text
+
         # Store sanitized user message
         if self.memory:
             if getattr(self, "memory_fabric", None):
@@ -1748,7 +2259,7 @@ class JARVISCore:
                 hist = self.memory_fabric.history(MemoryAddress("jarvis", str(self.guard.workspace), sid, "conversation"), limit=10)
             else:
                 hist = self.memory.get_history(sid, limit=10)
-            history = "\n".join(
+            history = self.context_compressor.compress(hist).text if getattr(self, "context_compressor", None) else "\n".join(
                 f"{h['role']}: {h['content']}" for h in hist
             )
 
@@ -1775,7 +2286,7 @@ class JARVISCore:
         )
 
         # Route through adaptive model intelligence when a compatible backend is available.
-        selected_backend = self.model_intelligence.choose(task_type=task_type) if getattr(self, "model_intelligence", None) else None
+        selected_backend = (self.adaptive_router.choose(cleaned_message, task_type=task_type).model if getattr(self, "adaptive_router", None) else (self.model_intelligence.choose(task_type=task_type) if getattr(self, "model_intelligence", None) else None))
         if stream:
             return self._chat_stream(prompt, sid, task_type=task_type, backend_name=selected_backend)
 
@@ -1806,7 +2317,7 @@ class JARVISCore:
                 prompt_tokens=actual_prompt_tokens, completion_tokens=completion_tokens,
             ))
         if getattr(self, "model_intelligence", None):
-            self.model_intelligence.record(actual_model, success=not text.startswith("["), latency_ms=elapsed_ms, task_type=task_type, tokens=completion_tokens)
+            self.model_intelligence.record(actual_model, success=not text.startswith("["), latency_ms=elapsed_ms, task_type=task_type, tokens=completion_tokens, task_text=cleaned_message)
 
         # Store assistant response
         if self.memory:
@@ -1816,7 +2327,29 @@ class JARVISCore:
             else:
                 self.memory.add(sid, "assistant", text)
 
+        try:
+            from core.memory_lifecycle import MemoryKind
+            self.memory_lifecycle.create(
+                f"{sid}:assistant:{time.time_ns()}",
+                MemoryKind.EPISODIC,
+                text,
+                "assistant",
+                importance=0.55,
+                confidence=0.9 if not text.startswith("[") else 0.2,
+                metadata={"session_id": sid, "model": actual_model, "backend": actual_backend},
+            )
+            self.model_residency.touch(actual_model, actual_backend)
+        except Exception as exc:
+            self.logger.debug("phase_b_state_update_failed", {"error": str(exc)})
+
         return text
+
+    def cognitive_request(self, message: str, *, session_id: str | None = None, backend_name: str | None = None, max_tokens: int = 4096) -> dict[str, Any]:
+        """Execute one provider-independent Phase-B cognitive turn without requiring the GUI."""
+        sid = session_id or self.current_session
+        return dict(self.cognitive_fabric.execute(
+            message, session_id=sid, backend_name=backend_name, max_tokens=max_tokens
+        ))
 
     def _chat_stream(self, prompt: str, sid: str, task_type: str = "default", backend_name: str | None = None) -> Iterator[str]:
         """Stream chat response chunk by chunk and account the completed inference."""
@@ -2206,6 +2739,7 @@ class JARVISCore:
             "backends": self.router.list_backends(),
             "memory_sessions": len(self.memory.list_sessions()) if self.memory else 0,
             "import_errors": len(_IMPORT_ERRORS),
+            "capabilities": {k: v.available for k, v in self.capabilities.snapshot().items()},
             "tools_registered": len(self.registry.list_tools()),
             "agents": (
                 [a.name for a in self.task_manager.list_agents()]
@@ -2223,6 +2757,13 @@ class JARVISCore:
                 self.tts.speak(text)
         except Exception as exc:
             self.logger.error("voice_command_failed", {"error": str(exc)})
+
+    def __del__(self) -> None:
+        """Best-effort emergency shutdown if an owner forgets explicit cleanup."""
+        try:
+            self.shutdown()
+        except Exception as exc:
+            logging.getLogger("jarvis.lifecycle").debug("best_effort_cleanup_failed", exc_info=exc)
 
     def __enter__(self):
         return self
@@ -2294,14 +2835,79 @@ class JARVISCore:
             except Exception as exc:
                 return SubsystemHealth("world_model", HealthStatus.ERROR, False, True, False, error_message=str(exc))
 
+        def _cognitive_probe() -> SubsystemHealth:
+            try:
+                snapshot = self.model_residency.snapshot()
+                return SubsystemHealth("cognitive_runtime", HealthStatus.OPERATIONAL, True, True, True, error_message=f"resident_models={len(snapshot)}")
+            except Exception as exc:
+                return SubsystemHealth("cognitive_runtime", HealthStatus.ERROR, False, True, False, error_message=str(exc))
+
+        def _cognitive_fabric_probe() -> SubsystemHealth:
+            try:
+                snapshot = self.cognitive_fabric.snapshot()
+                return SubsystemHealth("cognitive_fabric", HealthStatus.OPERATIONAL, True, True, True, error_message=f"episodes={snapshot["episodes"]}")
+            except Exception as exc:
+                return SubsystemHealth("cognitive_fabric", HealthStatus.ERROR, False, True, False, error_message=str(exc))
+
+        def _autonomy_fabric_probe() -> SubsystemHealth:
+            try:
+                snapshot = self.autonomy_fabric.snapshot()
+                return SubsystemHealth("autonomy_fabric", HealthStatus.OPERATIONAL, True, True, True, error_message=f"goals={snapshot['goals']} missions={snapshot['missions']}")
+            except Exception as exc:
+                return SubsystemHealth("autonomy_fabric", HealthStatus.ERROR, False, True, False, error_message=str(exc))
+
         self.health_registry.register("executive", _executive_probe, severity=ProbeSeverity.CRITICAL)
+        self.health_registry.register("autonomy_fabric", _autonomy_fabric_probe, severity=ProbeSeverity.CRITICAL)
         self.health_registry.register("world_model", _world_probe, severity=ProbeSeverity.DEGRADED)
+        self.health_registry.register("cognitive_runtime", _cognitive_probe, severity=ProbeSeverity.CRITICAL)
+        self.health_registry.register("cognitive_fabric", _cognitive_fabric_probe, severity=ProbeSeverity.CRITICAL)
+
+        def _control_plane_probe() -> SubsystemHealth:
+            try:
+                snap = self.cognitive_control_plane.snapshot()
+                valid = bool(snap["provenance"]["valid"])
+                status = HealthStatus.OPERATIONAL if valid else HealthStatus.ERROR
+                return SubsystemHealth("cognitive_control_plane", status, True, True, valid, error_message=f"state={snap["state"]}")
+            except Exception as exc:
+                return SubsystemHealth("cognitive_control_plane", HealthStatus.ERROR, False, True, False, error_message=str(exc))
+
+        self.health_registry.register("cognitive_control_plane", _control_plane_probe, severity=ProbeSeverity.CRITICAL)
+
+        def _frontier_probe() -> SubsystemHealth:
+            try:
+                snapshot = self.frontier.health()
+                valid = bool(snapshot["black_box"]["valid"])
+                status = HealthStatus.OPERATIONAL if valid else HealthStatus.ERROR
+                return SubsystemHealth("frontier_fabric", status, True, True, valid, error_message=f"missions={snapshot['missions']['missions']} tasks={snapshot['mcp_tasks']['tasks']}")
+            except Exception as exc:
+                return SubsystemHealth("frontier_fabric", HealthStatus.ERROR, False, True, False, error_message=str(exc))
+
+        self.health_registry.register("frontier_fabric", _frontier_probe, severity=ProbeSeverity.CRITICAL)
+
+        def _nextgen_probe() -> SubsystemHealth:
+            try:
+                snap = self.nextgen.health()
+                trusted = bool(snap["attestation"]["trusted"])
+                status = HealthStatus.OPERATIONAL if snap["wasi_runtime"] or not trusted else HealthStatus.DEGRADED
+                return SubsystemHealth("nextgen_fabric", status, True, True, True, error_message=f"mcp={snap['mcp']['supported_versions']} devices={snap['devices']['devices']}")
+            except Exception as exc:
+                return SubsystemHealth("nextgen_fabric", HealthStatus.ERROR, False, True, False, error_message=str(exc))
+
+        self.health_registry.register("nextgen_fabric", _nextgen_probe, severity=ProbeSeverity.DEGRADED)
 
 
         if self.job_service:
             self.shutdown_coordinator.register("job_service", self.job_service.shutdown)
         if getattr(self, "world_model", None) is not None:
             self.shutdown_coordinator.register("world_model", self.world_model.close)
+        if getattr(self, "frontier", None) is not None:
+            self.shutdown_coordinator.register("frontier", self.frontier.close)
+        self.shutdown_coordinator.register("platform_state_sync", self.platform_frontier["state_sync"].close)
+        self.shutdown_coordinator.register("nextgen_fabric", self.nextgen.close)
+        if hasattr(self, "long_term_workers"):
+            self.shutdown_coordinator.register("long_term_workers", self.long_term_workers.stop_all)
+        if hasattr(self, "autopilot"):
+            self.shutdown_coordinator.register("autopilot", self.autopilot.stop)
         self.shutdown_coordinator.register_state_persister("core", lambda: {
             "version": self.VERSION,
             "session": self.current_session,
@@ -2313,7 +2919,7 @@ class JARVISCore:
         if len(getattr(self.health_registry, "_probes", {})) > 0:
             deep = self.health_registry.deep_check()
             overall = "healthy" if deep["status"] == "healthy" else "degraded"
-            return {"overall": overall, "probes": deep["probes"], "summary": deep["summary"], "import_errors": dict(_IMPORT_ERRORS)}
+            return {"overall": overall, "probes": deep["probes"], "summary": deep["summary"], "import_errors": dict(_IMPORT_ERRORS), "lifecycle": self.lifecycle.snapshot()}
 
         services = {}
         for name, svc in getattr(self, "_services", {}).items():
@@ -2326,14 +2932,33 @@ class JARVISCore:
         overall = "healthy" if not degraded else "degraded"
         return {"overall": overall, "services": services, "import_errors": dict(_IMPORT_ERRORS)}
 
+    def _register_polyglot_runtimes(self) -> None:
+        """Register supported language surfaces as explicit, inspectable contracts."""
+        runtimes = (
+            RuntimeDescriptor("python", "Python", "cognitive orchestration", "REST/WebSocket", "3.12-3.13", ("agents", "rag", "memory", "routing")),
+            RuntimeDescriptor("dart", "Dart", "Flutter command deck", "WebSocket/Holo", "3.x", ("ui", "streaming", "telemetry")),
+            RuntimeDescriptor("rust", "Rust", "trusted native runtime", "gRPC/Protobuf", "2021", ("sandbox", "ipc", "supervision")),
+            RuntimeDescriptor("cpp", "C++", "AI/GPU runtime", "gRPC/Protobuf", "C++17+", ("llama.cpp", "cuda", "media")),
+            RuntimeDescriptor("go", "Go", "distributed infrastructure", "REST/gRPC", "1.22+", ("workers", "telemetry", "service-mesh")),
+            RuntimeDescriptor("typescript", "TypeScript", "web ecosystem", "REST/WebSocket", "ES2022+", ("browser", "web", "dashboard")),
+            RuntimeDescriptor("java", "Java", "JVM integration", "REST/gRPC", "17+", ("enterprise", "jvm")),
+            RuntimeDescriptor("csharp", "C#", ".NET integration", "REST/gRPC", "8+", ("windows", "dotnet")),
+            RuntimeDescriptor("kotlin", "Kotlin", "Android native layer", "Platform channel/gRPC", "2.x", ("android", "sensors", "device")),
+            RuntimeDescriptor("c", "C", "low-level system layer", "FFI/ABI", "C11+", ("drivers", "firmware")),
+            RuntimeDescriptor("lua", "Lua", "sandboxed skill scripting", "Embedded API", "5.4", ("plugins", "deterministic-scripts")),
+            RuntimeDescriptor("julia", "Julia", "scientific computing", "REST/gRPC", "1.x", ("simulation", "optimization")),
+        )
+        for descriptor in runtimes:
+            self.polyglot_runtimes.register(descriptor)
+
     def shutdown(self) -> None:
         """Gracefully shut down all subsystems via ShutdownCoordinator."""
         if self._shutdown:
             return
         self._shutdown = True
         self.logger.info("jarvis_shutdown", {"version": self.version})
-        try: self.v13_runtime.stop()
-        except Exception: pass
+        try: self.v13_runtime.close()
+        except Exception: self.logger.debug("v13_runtime_close_failed", exc_info=True)
 
         # Use ShutdownCoordinator for ordered, state-persistent shutdown
         self.shutdown_coordinator.initiate_shutdown()
@@ -2390,8 +3015,35 @@ class JARVISCore:
                 self.logger.debug("memory_shutdown_failed", exc_info=True)
         if getattr(self, "distributed", None) and hasattr(self.distributed, "shutdown"):
             self.distributed.shutdown()
+        if getattr(self, "lifecycle", None) is not None:
+            # EventBus has already been stopped by the ordered shutdown path;
+            # The explicit sync core owns the event bus; the lifecycle graph is
+            # kept observable without pretending it was asynchronously started.
+            self.lifecycle_snapshot = self.lifecycle.snapshot()
         if self.event_bus:
             self.event_bus.shutdown()
+
+        # Final lifecycle sweep: every subsystem owned directly by the core gets
+        # one last close/shutdown opportunity. This prevents leaked DB/file/socket
+        # resources when a newly added subsystem was not yet added to the ordered list.
+        seen_resources: set[int] = set()
+        for resource in list(self.__dict__.values()):
+            if resource is None or id(resource) in seen_resources:
+                continue
+            seen_resources.add(id(resource))
+            if resource is self or resource is self.logger:
+                continue
+            for lifecycle_name in ("shutdown", "close"):
+                lifecycle = getattr(resource, lifecycle_name, None)
+                if not callable(lifecycle):
+                    continue
+                try:
+                    lifecycle()
+                except TypeError:
+                    continue
+                except Exception as exc:
+                    self.logger.debug("resource_lifecycle_sweep_failed", {"resource": type(resource).__name__, "method": lifecycle_name, "exception": repr(exc)})
+                break
 
         for t in self._threads:
             if hasattr(t, "stop"):
@@ -2433,14 +3085,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="JARVIS v12.8.0")
     parser.add_argument("--config", help="Path to config.json")
     parser.add_argument("--api", action="store_true", help="Start API server")
-    parser.add_argument("--gui", action="store_true", help="Start GUI")
     parser.add_argument("--doctor", action="store_true", help="Run diagnostics and exit")
     args = parser.parse_args()
 
     if args.doctor:
         d = Doctor()
         d.run_all()
-        print(json.dumps(d.get_report(), indent=2))
+        report = d.get_report()
+        print(json.dumps(report, indent=2))
+        if not bool(report.get("ok")):
+            raise SystemExit(1)
         return
 
     cfg = load_config(args.config)
@@ -2474,13 +3128,6 @@ def main() -> None:
         except Exception as exc:
             logger.error("API server failed to start: %s", exc)
             print(f"API server error: {exc}")
-    elif args.gui:
-        try:
-            from gui.flet_app import FletApp
-
-            FletApp(core).run()
-        except Exception as exc:
-            print(f"GUI error: {exc}")
     else:
         core.run_cli()
 

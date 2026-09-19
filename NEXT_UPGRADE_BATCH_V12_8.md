@@ -1,19 +1,29 @@
-# J.A.R.V.I.S. V12.8 Upgrade Batch
+# J.A.R.V.I.S. V12.8.0 — Remaining Next Improvements
 
-V12.7 implements the previous upgrade batch. The next batch should focus on turning the new autonomous fabric into a validated distributed production system.
+This document is deliberately a backlog, not a placeholder list for incomplete source modules. The current source tree has passed its source-level gates; the items below are the next engineering frontier or require target-machine certification.
 
-1. **Signed worker enrollment and mutual TLS** — replace bearer-only remote worker trust with device certificates, rotation and revocation.
-2. **Real distributed job transport** — durable queues, leases, retries, cancellation, result streaming and exactly-once/idempotent task semantics across multiple machines.
-3. **OS-native sandbox tiers** — Windows Job Objects/AppContainer and Linux namespaces/seccomp where supported, with capability-specific profiles.
-4. **World-model reasoning** — temporal contradiction resolution, causal inference, event replay and graph-backed planning.
-5. **Long-horizon planner** — hierarchical planning, dependency graphs, resource-aware replanning and persistent objectives.
-6. **Autonomous evaluation fleet** — continuously benchmark local/remote models against coding, reasoning, tool-use, multimodal and safety suites.
-7. **Memory compaction and migration** — background consolidation, encrypted snapshots, index versioning and verified restore drills.
-8. **Full vision computer-use stack** — OCR, UI element grounding, screenshot differencing and action outcome classifiers.
-9. **Multimodal streaming** — low-latency audio/vision/text event fusion and interruption-aware voice interaction.
-10. **Model serving layer** — persistent local inference workers, VRAM-aware admission control, batching and model hot-swap.
-11. **Supply-chain enforcement** — lockfile hashes, SBOM signing, vulnerability feeds, provenance attestations and reproducible builds.
-12. **Adversarial autonomy testing** — automated confused-deputy, prompt-injection, SSRF, grant-forgery, race-condition and data-exfiltration campaigns.
-13. **Production observability** — OpenTelemetry traces, durable metrics, token/cost accounting, SLOs and anomaly alerts.
-14. **Recovery engineering** — crash-consistent state restoration, chaos tests, fault injection and automatic rollback drills.
-15. **Target-machine certification** — Windows + NVIDIA + Flet + voice + browser + optional model stack end-to-end certification.
+## Target-machine certification
+
+1. Flutter Windows/Linux/Android build, analyze, test and UI soak.
+2. RTX 4060 Ti GGUF/llama.cpp real-model benchmark and VRAM certification.
+3. Real Whisper/STT, TTS, camera and microphone certification.
+4. Rust native runtime and OS-level sandbox compilation/testing.
+5. C#/.NET Windows integration build.
+6. Multi-node gRPC interoperability and chaos/soak tests.
+7. Production mTLS rotation/revocation with a real CA.
+8. Long-duration mission recovery and crash/restart drills.
+
+## Research frontier
+
+1. Hardware-backed/TEE identity and confidential execution.
+2. Distributed memory conflict-free replication and encrypted offline sync.
+3. Advanced multimodal long-term memory with temporal media retrieval.
+4. Formal verification/model checking for critical capability policies.
+5. Engine-specific KV-cache sharing and speculative decoding benchmarks.
+6. Real disaggregated prefill/decode execution once multiple inference nodes are available.
+7. WebAssembly/WASI production runtime integration after choosing and certifying a runtime.
+8. J.A.R.V.I.S. native-runtime/AI-native-OS layer design and hardware abstraction validation.
+
+## Verification policy
+
+No target-specific item is reported as passed merely because a source contract exists.

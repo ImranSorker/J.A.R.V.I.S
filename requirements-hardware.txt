@@ -1,0 +1,3 @@
+# Optional NVIDIA hardware telemetry
+-r requirements.txt
+pynvml>=12,<14

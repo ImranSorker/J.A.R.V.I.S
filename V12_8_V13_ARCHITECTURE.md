@@ -1,8 +1,20 @@
-# J.A.R.V.I.S. V12.8 → V13 Architecture Upgrade
+# J.A.R.V.I.S. V12.8.0 — Architecture Convergence
+
+V12.8.0 remains the permanent development trunk. Progress is tracked by internal milestones and CI evidence, never feature version bumps.
+
+## Internal milestone: Phase A Foundation
+Stable Capability, Event, Resource, Lifecycle and Config contracts; bounded event fabric; structured concurrency; capability discovery; architecture boundaries; dependency-cycle detection; strict warning-free regression gate.
+
+## Internal milestone: Phase B Intelligence
+Unified cognitive runtime, bounded context assembly, model residency, hybrid semantic/lexical/graph-aware retrieval with reranking, provenance-aware memory lifecycle, and deterministic evaluation.
+
+The next architecture work must converge existing legacy subsystems behind these contracts rather than add parallel feature managers.
+
+# J.A.R.V.I.S. V12.8.0 Permanent Trunk — Internal Kernel Architecture
 
 ## Goal
 
-V12.7.3 is feature-rich but the `JARVISCore` bootstrap is still a large integration composition root. V12.8/V13 introduces a **Kernel boundary** without deleting the mature V12 subsystems.
+V12.7.3 is feature-rich but the `JARVISCore` bootstrap is still a large integration composition root. V12.8.0 introduces a **Kernel boundary** without deleting the mature V12 subsystems.
 
 ### V12.8 — Runtime Hardening
 - Event-sourced runtime journal (`core/v13/event_store.py`) with SQLite WAL, replay and correlation IDs.
@@ -11,7 +23,7 @@ V12.7.3 is feature-rich but the `JARVISCore` bootstrap is still a large integrat
 - Kernel/facade lifecycle (`core/v13/runtime.py`) that can sit above existing V12 services.
 - Backward-compatible integration in `JARVISCore`.
 
-### V13 — Platform Architecture
+### Internal Kernel — Platform Architecture
 
 ```text
                     ┌──────────────────────────┐
@@ -19,7 +31,7 @@ V12.7.3 is feature-rich but the `JARVISCore` bootstrap is still a large integrat
                     └────────────┬─────────────┘
                                  │ commands/events
                     ┌────────────▼─────────────┐
-                    │       V13 Runtime        │
+                    │       Kernel Runtime        │
                     │ lifecycle + correlation  │
                     └──────┬─────────┬─────────┘
                            │         │
@@ -61,8 +73,8 @@ V12.7.3 is feature-rich but the `JARVISCore` bootstrap is still a large integrat
 
 **V12.8.0:** adopt the kernel/event/policy contracts while retaining all V12 services.
 
-**V12.8.1–12.8.9:** move job execution, model routing, memory mutations, computer-use and distributed workers behind the kernel interfaces one subsystem at a time.
+**V12.8.0 internal milestones:** move job execution, model routing, memory mutations, computer-use and distributed workers behind the kernel interfaces one subsystem at a time.
 
-**V13.0:** make the kernel the only orchestration entry point; `JARVISCore` becomes a compatibility/composition layer. UI/API clients consume the same command/event contracts.
+**Future internal milestone:** make the kernel the only orchestration entry point; `JARVISCore` becomes a compatibility/composition layer. UI/API clients consume the same command/event contracts.
 
 This release intentionally does **not** replace the mature V12 implementations wholesale. It establishes the stable seams needed to evolve them safely.

@@ -1,4 +1,4 @@
-# J.A.R.V.I.S. V12.8.0 — aggregate optional capability profile
+# J.A.R.V.I.S. V12.8.0 — complete Python capability profile
 -r requirements-ai.txt
 -r requirements-voice.txt
 -r requirements-browser.txt

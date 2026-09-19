@@ -1,0 +1,6 @@
+# J.A.R.V.I.S. V12.8.0 — optional voice capability profile
+-r requirements.txt
+pyttsx3>=2.90,<3
+openai-whisper>=20231117,<2028
+sounddevice>=0.4,<1
+scipy>=1.12,<2

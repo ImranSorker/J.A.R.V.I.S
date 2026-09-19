@@ -1,0 +1,5 @@
+# J.A.R.V.I.S. V12.8.0 — optional local AI/ML profile
+-r requirements-memory.txt
+-r requirements-hardware.txt
+llama-cpp-python>=0.3,<1
+transformers>=4.40,<6

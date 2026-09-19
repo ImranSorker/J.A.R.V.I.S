@@ -60,7 +60,7 @@ jarvis_v1261/
 -----------------------------
 - CLI: python main.py [--config path]
 - API: uvicorn api.server:app --host 0.0.0.0 --port 8000
-- GUI: flet_app.main() launches desktop window
+- ARCHIVE NOTE: legacy Flet GUI path retired; Flutter/Dart is the supported desktop/mobile client.
 - Background: 5 daemon threads (proactive, nightly, scheduler, watchdog, dispatcher)
 
 2.3 Threading/Concurrency Model

@@ -1,2 +1,4 @@
-lancedb>=0.6.0
-sentence-transformers>=2.5.0
+# Optional persistent/vector memory capability profile
+-r requirements.txt
+lancedb>=0.6,<1
+sentence-transformers>=2.5,<6

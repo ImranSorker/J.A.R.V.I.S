@@ -5,15 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "jarvis-v12"
 version = "12.8.0"
-description = "J.A.R.V.I.S. production cognitive platform with Flet command center"
+description = "J.A.R.V.I.S. production cognitive platform with Flutter Holo Command Deck"
 requires-python = ">=3.12,<3.14"
 dependencies = [
-    "flet==0.86.5",
     "requests>=2.31.0",
     "numpy>=1.26",
     "psutil>=5.9",
-    "pynvml>=12.0",
-    "lancedb>=0.6",
     "rich>=13.7",
     "fastapi>=0.110",
     "uvicorn>=0.29",
@@ -23,62 +20,38 @@ dependencies = [
     "jsonschema>=4.21",
 ]
 
-[tool.flet]
-desktop_flavor = "full"
-product = "JARVIS"
-org = "com.jarvis"
-bundle_id = "com.jarvis.ai"
-
-[tool.flet.app]
-module = "gui/flet_app.py"
+[project.optional-dependencies]
+dev = ["pytest>=8,<10", "pytest-asyncio>=0.23,<2", "pytest-cov>=5,<8", "httpx2>=2,<3", "black>=24,<27", "ruff>=0.6,<1", "pyflakes>=3.2,<4", "mypy>=1.11,<2", "bandit>=1.7,<2", "grpcio>=1.66,<2", "grpcio-tools>=1.66,<2", "protobuf>=5.27,<7", "opentelemetry-api>=1.30,<2", "opentelemetry-sdk>=1.30,<2", "wasmtime>=25,<40"]
+memory = ["lancedb>=0.6,<1", "sentence-transformers>=2.5,<6"]
+hardware = ["pynvml>=12,<14"]
+ai = ["llama-cpp-python>=0.3,<1", "transformers>=4.40,<6", "lancedb>=0.6,<1", "sentence-transformers>=2.5,<6", "pynvml>=12,<14"]
+voice = ["pyttsx3>=2.90,<3", "openai-whisper>=20231117,<2028", "sounddevice>=0.4,<1", "scipy>=1.12,<2"]
+browser = ["playwright>=1.42,<2"]
+desktop = ["Pillow>=10,<12", "pyautogui>=0.9.54,<1", "pyperclip>=1.9,<2", "mss>=9,<11", "opencv-python>=4.10,<5", "python-docx>=1.1,<2", "openpyxl>=3.1,<4", "python-pptx>=1,<2"]
+grpc = ["grpcio>=1.66,<2", "grpcio-tools>=1.66,<2", "protobuf>=5.27,<7"]
+observability = ["opentelemetry-api>=1.30,<2", "opentelemetry-sdk>=1.30,<2"]
+plugins = ["wasmtime>=25,<40"]
+full = ["llama-cpp-python>=0.3,<1", "transformers>=4.40,<6", "lancedb>=0.6,<1", "sentence-transformers>=2.5,<6", "pynvml>=12,<14", "pyttsx3>=2.90,<3", "openai-whisper>=20231117,<2028", "sounddevice>=0.4,<1", "scipy>=1.12,<2", "playwright>=1.42,<2", "Pillow>=10,<12", "pyautogui>=0.9.54,<1", "pyperclip>=1.9,<2", "mss>=9,<11", "opencv-python>=4.10,<5", "python-docx>=1.1,<2", "openpyxl>=3.1,<4", "python-pptx>=1,<2", "grpcio>=1.66,<2", "grpcio-tools>=1.66,<2", "protobuf>=5.27,<7"]
 
 [tool.setuptools]
 py-modules = ["main"]
 
-[project.scripts]
-jarvis = "main:main"
-
-[tool.flet.windows]
-dependencies = [
-    "numpy>=1.26.0", "psutil>=5.9.0", "beautifulsoup4>=4.12.0", "markdown>=3.5.0",
-    "pdfminer.six>=20221105", "python-dateutil>=2.8.0", "rich>=13.7.0", "watchdog>=4.0.0",
-    "fastapi>=0.110.0", "uvicorn[standard]>=0.29.0", "pydantic>=2.6.0", "pyzmq>=25.0.0",
-    "lancedb>=0.6.0", "sentence-transformers>=2.5.0", "playwright>=1.42.0",
-    "sounddevice>=0.4.0", "scipy>=1.12.0", "pillow>=10,<12.0.0", "pyautogui>=0.9.54"
-]
-
-[tool.flet.linux]
-dependencies = [
-    "numpy>=1.26.0", "psutil>=5.9.0", "beautifulsoup4>=4.12.0", "markdown>=3.5.0",
-    "pdfminer.six>=20221105", "python-dateutil>=2.8.0", "rich>=13.7.0", "watchdog>=4.0.0",
-    "fastapi>=0.110.0", "uvicorn[standard]>=0.29.0", "pydantic>=2.6.0", "pyzmq>=25.0.0",
-    "lancedb>=0.6.0", "sentence-transformers>=2.5.0", "playwright>=1.42.0",
-    "sounddevice>=0.4.0", "scipy>=1.12.0", "pillow>=10,<12.0.0", "pyautogui>=0.9.54"
-]
-
-[tool.flet.android]
-dependencies = []
-target_arch = ["arm64-v8a", "x86_64", "armeabi-v7a"]
-
-[project.optional-dependencies]
-dev = ["pytest>=8.0", "flet[test]", "ruff>=0.6", "pyflakes>=3.2", "mypy>=1.11", "bandit>=1.7"]
-ml = ["llama-cpp-python>=0.3", "transformers>=4.40", "sentence-transformers>=2.5"]
-voice = ["pyttsx3>=2.90", "openai-whisper>=20231117"]
-browser = ["playwright>=1.42"]
-
 [tool.setuptools.packages.find]
 include = [
-    "api*", "agents*", "aion_bridge*", "computer*", "core*", "gui*", "knowledge*",
+    "api*", "agents*", "aion_bridge*", "computer*", "core*", "knowledge*",
     "memory*", "observability*", "plugins*", "protocols*", "qwen_integration*",
-    "services*", "security*", "certification*", "tools*", "training*", "voice*"
+    "services*", "security*", "certification*", "tools*", "training*", "voice*", "tests*"
 ]
-exclude = ["tests*", "data*", "*.tests*"]
+exclude = ["data*", "*.tests*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 addopts = "-ra"
-
+filterwarnings = [
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.:DeprecationWarning:starlette.testclient"
+]
 [tool.ruff]
 target-version = "py312"
 line-length = 120
@@ -89,6 +62,6 @@ line-length = 120
 select = ["F821", "F401", "F841", "E9", "RUF012", "PLE1205"]
 
 [tool.ruff.lint.per-file-ignores]
-# main.py self.logger is the StructuredLogger adapter (event, data) — the PLE1205
+# main.py self.logger is the StructuredLogger adapter (event, data) ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â the PLE1205
 # flags are stdlib-semantics false positives.
 "main.py" = ["PLE1205"]

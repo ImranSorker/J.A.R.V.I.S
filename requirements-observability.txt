@@ -1,0 +1,4 @@
+# J.A.R.V.I.S. V12.8.0 — optional OpenTelemetry observability profile
+-r requirements.txt
+opentelemetry-api>=1.30,<2
+opentelemetry-sdk>=1.30,<2

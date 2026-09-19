@@ -1,0 +1,10 @@
+# J.A.R.V.I.S. V12.8.0 — optional desktop/device/document profile
+-r requirements.txt
+Pillow>=10,<12
+pyautogui>=0.9.54,<1
+pyperclip>=1.9,<2
+mss>=9,<11
+opencv-python>=4.10,<5
+python-docx>=1.1,<2
+openpyxl>=3.1,<4
+python-pptx>=1,<2
